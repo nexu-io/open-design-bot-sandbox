@@ -1,0 +1,28 @@
+name = "open-design-bot"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# After `pnpm deploy` the worker is reachable at:
+#   https://open-design-bot.nexu-io.workers.dev/
+#   https://open-design-bot.nexu-io.workers.dev/health
+#   https://open-design-bot.nexu-io.workers.dev/webhook  ← put this in the GitHub App's Webhook URL field
+#
+# Cloudflare account: nexu-io (account id b7b575e650466ed551c9d6a585a8e8fe)
+
+# Cron: Daily incremental sync at 00:05 UTC (08:05 Beijing)
+[triggers]
+crons = ["5 0 * * *"]
+
+# Production secrets (set via `wrangler secret put`):
+#   GH_APP_ID                 = 3640364
+#   GH_APP_INSTALLATION_ID    = 130472709
+#   GH_APP_PRIVATE_KEY        (full PEM contents — get from 1Password / secure note)
+#   GH_WEBHOOK_SECRET         (64-char hex — get from 1Password / secure note)
+
+[vars]
+GH_REPO_OWNER = "nexu-io"
+GH_REPO_NAME = "open-design"
+DATA_PATH = "data/contributors.json"
+EVENTS_PATH = "data/events.jsonl"
+CONTRIBUTORS_MD_PATH = "CONTRIBUTORS.md"
