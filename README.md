@@ -1,4 +1,4 @@
-# Open Design Contributor Bot · Internal Sandbox
+# Open Design Contributor Bot
 
 This is the **internal test sandbox** for the contributor recognition bot that will eventually live in [`nexu-io/open-design`](https://github.com/nexu-io/open-design).
 
