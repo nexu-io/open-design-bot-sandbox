@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.wrangler/
+.dev.vars
+*.pem
+*.private-key.pem
+.DS_Store
+preview/
+out/
