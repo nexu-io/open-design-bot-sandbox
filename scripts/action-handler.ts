@@ -25,8 +25,9 @@ import { SignalCard } from "../src/cards/SignalCard.tsx";
 import { NodeCard } from "../src/cards/NodeCard.tsx";
 import { BeaconCard } from "../src/cards/BeaconCard.tsx";
 import { NovaCard } from "../src/cards/NovaCard.tsx";
-import { tierByKey } from "../src/tier.ts";
+import { tierByKey, tierFromPoints } from "../src/tier.ts";
 import { tierUpComment, welcomeSparkComment } from "../src/comment.ts";
+import { fetchVauntContributorScore } from "../src/vaunt.ts";
 
 const REGISTRY = {
   spark: SparkCard,
@@ -50,19 +51,22 @@ interface RenderArgs {
   author: { login: string; avatar_url: string };
   tierKey: TierKey;
   scenario: "tier-up" | "welcome-spark";
+  points: number;
+  rank: number;
+  totalContributors: number;
 }
 
 async function renderAndPost(octokit: ReturnType<typeof App.prototype.getInstallationOctokit> extends Promise<infer T> ? T : never, args: RenderArgs) {
-  const { owner, repo, threadNumber, author, tierKey, scenario } = args;
+  const { owner, repo, threadNumber, author, tierKey, scenario, points, rank, totalContributors } = args;
   const tier = tierByKey(tierKey);
 
   const cardProps: CardProps = {
     username: author.login,
     avatarUrl: author.avatar_url,
-    rank: 1,
-    totalContributors: 1,
-    topPercent: 100,
-    points: scenario === "welcome-spark" ? 0 : tier.threshold,
+    rank,
+    totalContributors,
+    topPercent: totalContributors > 0 ? (rank / totalContributors) * 100 : 100,
+    points,
     streakWeeks: 0,
     prsMerged: scenario === "tier-up" ? 1 : 0,
     reviews: 0,
@@ -170,12 +174,22 @@ async function main() {
       console.log("   skipping: bot author");
       return;
     }
+
+    const vauntScore = await fetchVauntContributorScore(owner, repo, author.login);
+    const estimatedPoints = (vauntScore?.score ?? 0) + 1;
+    const tier = tierFromPoints(estimatedPoints);
+    const rank = vauntScore?.rank ?? 1;
+    const totalContributors = vauntScore?.totalFetched ?? 1;
+
     await renderAndPost(octokit, {
       owner, repo,
       threadNumber: event.pull_request.number,
       author: { login: author.login, avatar_url: author.avatar_url },
-      tierKey: "signal",
-      scenario: "tier-up",
+      tierKey: tier.key,
+      scenario: tier.key === "spark" ? "welcome-spark" : "tier-up",
+      points: estimatedPoints,
+      rank,
+      totalContributors,
     });
   } else if (eventName === "issues" && event.action === "opened") {
     const author = event.issue.user;
@@ -189,6 +203,9 @@ async function main() {
       author: { login: author.login, avatar_url: author.avatar_url },
       tierKey: "spark",
       scenario: "welcome-spark",
+      points: 0,
+      rank: 1,
+      totalContributors: 1,
     });
   } else {
     console.log(`   skipping: ${eventName}.${event.action} not handled`);
