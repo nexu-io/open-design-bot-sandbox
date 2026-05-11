@@ -92,7 +92,7 @@ export function SignalCard(p: CardProps) {
           {`Top ${p.topPercent.toFixed(1)}% · Rank #${p.rank.toLocaleString()}`}
         </div>
         <div style={{ fontSize: 30, color: "#CBD5E1", marginTop: 8 }}>
-          {`${p.points} points${p.streakWeeks > 0 ? ` · 🔥 ${p.streakWeeks}w streak` : ""}`}
+          {`${p.points} contributions${p.streakWeeks > 0 ? ` · 🔥 ${p.streakWeeks}w streak` : ""}`}
         </div>
       </div>
 
@@ -150,7 +150,7 @@ function StatsGrid({ p, accent }: { p: CardProps; accent: string }) {
     { label: "PRs merged", value: p.prsMerged },
     { label: "reviews", value: p.reviews },
     { label: "discussions answered", value: p.discussionsAnswered },
-    { label: "issues accepted", value: p.issuesAccepted },
+    { label: "issues opened", value: p.issuesAccepted },
   ];
   return (
     <div style={{ display: "flex", flexWrap: "wrap", marginTop: 22, gap: 14 }}>

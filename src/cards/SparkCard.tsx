@@ -42,7 +42,7 @@ export function SparkCard(p: CardProps) {
 
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: 22 }}>
         <div style={{ fontSize: 80, fontWeight: 900, letterSpacing: -1 }}>{`Top ${p.topPercent.toFixed(0)}% · Rank #${p.rank.toLocaleString()}`}</div>
-        <div style={{ fontSize: 30, color: "#CBD5E1", marginTop: 8 }}>{`${p.points} points · welcome aboard!`}</div>
+        <div style={{ fontSize: 30, color: "#CBD5E1", marginTop: 8 }}>{`${p.points} contributions · welcome aboard!`}</div>
       </div>
 
       <StatsGrid p={p} accent={ACCENT} />
@@ -76,7 +76,7 @@ function StatsGrid({ p, accent }: { p: CardProps; accent: string }) {
     { label: "PRs merged", value: p.prsMerged },
     { label: "reviews", value: p.reviews },
     { label: "discussions answered", value: p.discussionsAnswered },
-    { label: "issues commented", value: p.issuesAccepted },
+    { label: "issues opened", value: p.issuesAccepted },
   ];
   return (
     <div style={{ display: "flex", flexWrap: "wrap", marginTop: 22, gap: 14 }}>
