@@ -2,19 +2,8 @@ import satori from "satori";
 import { Resvg, initWasm } from "@resvg/resvg-wasm";
 
 import type { CardProps, TierKey } from "./cards/types.ts";
-import { SparkCard } from "./cards/SparkCard.tsx";
-import { SignalCard } from "./cards/SignalCard.tsx";
-import { NodeCard } from "./cards/NodeCard.tsx";
-import { BeaconCard } from "./cards/BeaconCard.tsx";
-import { NovaCard } from "./cards/NovaCard.tsx";
-
-const CARD_REGISTRY = {
-  spark: SparkCard,
-  signal: SignalCard,
-  node: NodeCard,
-  beacon: BeaconCard,
-  nova: NovaCard,
-} as const;
+import { CertificateCard } from "./cards/CertificateCard.tsx";
+import { tierByKey } from "./tier.ts";
 
 let resvgReady = false;
 async function ensureResvg(wasmUrl: string): Promise<void> {
@@ -26,9 +15,10 @@ async function ensureResvg(wasmUrl: string): Promise<void> {
 
 export interface RenderOptions {
   fontInter400: ArrayBuffer;
-  fontInter900: ArrayBuffer;
-  fontCjk400: ArrayBuffer;
-  fontCjk900: ArrayBuffer;
+  fontInter700: ArrayBuffer;
+  fontBebas: ArrayBuffer;
+  fontPlayfair: ArrayBuffer;
+  certificateBaseDataUrl: string;
   resvgWasmUrl: string;
 }
 
@@ -39,17 +29,21 @@ export async function renderCardPng(
 ): Promise<Uint8Array> {
   await ensureResvg(opts.resvgWasmUrl);
 
-  const Component = CARD_REGISTRY[tier];
-  const node = (Component as (p: CardProps) => unknown)(props);
+  const tierDef = tierByKey(tier);
+  const node = CertificateCard({
+    ...props,
+    baseImageDataUrl: opts.certificateBaseDataUrl,
+    tierNameEn: tierDef.nameEn,
+  });
 
   const svg = await satori(node as Parameters<typeof satori>[0], {
-    width: 1080,
-    height: 1080,
+    width: 941,
+    height: 1672,
     fonts: [
       { name: "Inter", data: opts.fontInter400, weight: 400, style: "normal" },
-      { name: "Inter", data: opts.fontInter900, weight: 900, style: "normal" },
-      { name: "Noto Sans SC", data: opts.fontCjk400, weight: 400, style: "normal" },
-      { name: "Noto Sans SC", data: opts.fontCjk900, weight: 900, style: "normal" },
+      { name: "Inter", data: opts.fontInter700, weight: 700, style: "normal" },
+      { name: "Bebas", data: opts.fontBebas, weight: 400, style: "normal" },
+      { name: "Playfair", data: opts.fontPlayfair, weight: 400, style: "normal" },
     ],
   });
 
@@ -58,39 +52,60 @@ export async function renderCardPng(
   return png;
 }
 
-const FONT_400_URL =
+const FONT_INTER_400_URL =
   "https://cdn.jsdelivr.net/fontsource/fonts/inter@latest/latin-400-normal.ttf";
-const FONT_900_URL =
-  "https://cdn.jsdelivr.net/fontsource/fonts/inter@latest/latin-900-normal.ttf";
-const CJK_400_URL =
-  "https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-sc@latest/chinese-simplified-400-normal.ttf";
-const CJK_900_URL =
-  "https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-sc@latest/chinese-simplified-900-normal.ttf";
+const FONT_INTER_700_URL =
+  "https://cdn.jsdelivr.net/fontsource/fonts/inter@latest/latin-700-normal.ttf";
+const FONT_BEBAS_URL =
+  "https://cdn.jsdelivr.net/fontsource/fonts/bebas-neue@latest/latin-400-normal.ttf";
+const FONT_PLAYFAIR_URL =
+  "https://cdn.jsdelivr.net/fontsource/fonts/playfair-display@latest/latin-400-normal.ttf";
+const CERTIFICATE_BASE_URL =
+  "https://raw.githubusercontent.com/nexu-io/open-design-bot-sandbox/main/assets/certificate-base.png";
 const RESVG_WASM_URL =
   "https://unpkg.com/@resvg/resvg-wasm@2.6.2/index_bg.wasm";
 
-let cachedFonts: {
-  f400: ArrayBuffer;
-  f900: ArrayBuffer;
-  cjk400: ArrayBuffer;
-  cjk900: ArrayBuffer;
+let cachedAssets: {
+  inter400: ArrayBuffer;
+  inter700: ArrayBuffer;
+  bebas: ArrayBuffer;
+  playfair: ArrayBuffer;
+  baseDataUrl: string;
 } | null = null;
 
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]!);
+  }
+  // btoa is available in Workers and modern Node (>=16)
+  return btoa(binary);
+}
+
 export async function defaultRenderOpts(): Promise<RenderOptions> {
-  if (!cachedFonts) {
-    const [f400, f900, cjk400, cjk900] = await Promise.all([
-      fetch(FONT_400_URL).then((r) => r.arrayBuffer()),
-      fetch(FONT_900_URL).then((r) => r.arrayBuffer()),
-      fetch(CJK_400_URL).then((r) => r.arrayBuffer()),
-      fetch(CJK_900_URL).then((r) => r.arrayBuffer()),
+  if (!cachedAssets) {
+    const [inter400, inter700, bebas, playfair, baseBuf] = await Promise.all([
+      fetch(FONT_INTER_400_URL).then((r) => r.arrayBuffer()),
+      fetch(FONT_INTER_700_URL).then((r) => r.arrayBuffer()),
+      fetch(FONT_BEBAS_URL).then((r) => r.arrayBuffer()),
+      fetch(FONT_PLAYFAIR_URL).then((r) => r.arrayBuffer()),
+      fetch(CERTIFICATE_BASE_URL).then((r) => r.arrayBuffer()),
     ]);
-    cachedFonts = { f400, f900, cjk400, cjk900 };
+    cachedAssets = {
+      inter400,
+      inter700,
+      bebas,
+      playfair,
+      baseDataUrl: `data:image/png;base64,${arrayBufferToBase64(baseBuf)}`,
+    };
   }
   return {
-    fontInter400: cachedFonts.f400,
-    fontInter900: cachedFonts.f900,
-    fontCjk400: cachedFonts.cjk400,
-    fontCjk900: cachedFonts.cjk900,
+    fontInter400: cachedAssets.inter400,
+    fontInter700: cachedAssets.inter700,
+    fontBebas: cachedAssets.bebas,
+    fontPlayfair: cachedAssets.playfair,
+    certificateBaseDataUrl: cachedAssets.baseDataUrl,
     resvgWasmUrl: RESVG_WASM_URL,
   };
 }

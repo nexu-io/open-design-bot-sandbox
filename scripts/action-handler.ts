@@ -14,32 +14,22 @@
  *   GITHUB_EVENT_PATH          path to event JSON
  */
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { App } from "octokit";
 import satori from "satori";
 import { Resvg } from "@resvg/resvg-js";
 
 import type { CardProps, TierKey } from "../src/cards/types.ts";
-import { SparkCard } from "../src/cards/SparkCard.tsx";
-import { SignalCard } from "../src/cards/SignalCard.tsx";
-import { NodeCard } from "../src/cards/NodeCard.tsx";
-import { BeaconCard } from "../src/cards/BeaconCard.tsx";
-import { NovaCard } from "../src/cards/NovaCard.tsx";
+import { CertificateCard } from "../src/cards/CertificateCard.tsx";
 import { tierByKey, tierFromPoints } from "../src/tier.ts";
 import { tierUpComment, welcomeSparkComment } from "../src/comment.ts";
 import { fetchVauntContributorScore } from "../src/vaunt.ts";
 
-const REGISTRY = {
-  spark: SparkCard,
-  signal: SignalCard,
-  node: NodeCard,
-  beacon: BeaconCard,
-  nova: NovaCard,
-} as const;
-
-const FONT_400_URL = "https://cdn.jsdelivr.net/fontsource/fonts/inter@latest/latin-400-normal.ttf";
-const FONT_900_URL = "https://cdn.jsdelivr.net/fontsource/fonts/inter@latest/latin-900-normal.ttf";
-const CJK_400_URL = "https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-sc@latest/chinese-simplified-400-normal.ttf";
-const CJK_900_URL = "https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-sc@latest/chinese-simplified-900-normal.ttf";
+const FONT_INTER_400_URL = "https://cdn.jsdelivr.net/fontsource/fonts/inter@latest/latin-400-normal.ttf";
+const FONT_INTER_700_URL = "https://cdn.jsdelivr.net/fontsource/fonts/inter@latest/latin-700-normal.ttf";
+const FONT_BEBAS_URL = "https://cdn.jsdelivr.net/fontsource/fonts/bebas-neue@latest/latin-400-normal.ttf";
+const FONT_PLAYFAIR_URL = "https://cdn.jsdelivr.net/fontsource/fonts/playfair-display@latest/latin-400-normal.ttf";
+const CERTIFICATE_BASE_PATH = "assets/certificate-base.png";
 
 const CARDS_BRANCH = "bot-cards";
 const STATE_PATH = "data/contributor-card-state.json";
@@ -112,22 +102,27 @@ async function renderAndPost(octokit: BotOctokit, args: RenderArgs, stats: Contr
   };
 
   console.log(`🎨 Rendering ${tier.emoji} ${tier.nameEn} card for @${author.login}...`);
-  const [f400, f900, cjk400, cjk900] = await Promise.all([
-    fetch(FONT_400_URL).then((r) => r.arrayBuffer()),
-    fetch(FONT_900_URL).then((r) => r.arrayBuffer()),
-    fetch(CJK_400_URL).then((r) => r.arrayBuffer()),
-    fetch(CJK_900_URL).then((r) => r.arrayBuffer()),
+  const [inter400, inter700, bebas, playfair] = await Promise.all([
+    fetch(FONT_INTER_400_URL).then((r) => r.arrayBuffer()),
+    fetch(FONT_INTER_700_URL).then((r) => r.arrayBuffer()),
+    fetch(FONT_BEBAS_URL).then((r) => r.arrayBuffer()),
+    fetch(FONT_PLAYFAIR_URL).then((r) => r.arrayBuffer()),
   ]);
-  const Component = REGISTRY[tierKey];
-  const node = (Component as (p: CardProps) => unknown)(cardProps);
+  const baseBytes = readFileSync(join(process.cwd(), CERTIFICATE_BASE_PATH));
+  const baseImageDataUrl = `data:image/png;base64,${baseBytes.toString("base64")}`;
+  const node = CertificateCard({
+    ...cardProps,
+    baseImageDataUrl,
+    tierNameEn: tier.nameEn,
+  });
   const svg = await satori(node as Parameters<typeof satori>[0], {
-    width: 1080,
-    height: 1080,
+    width: 941,
+    height: 1672,
     fonts: [
-      { name: "Inter", data: f400, weight: 400, style: "normal" },
-      { name: "Inter", data: f900, weight: 900, style: "normal" },
-      { name: "Noto Sans SC", data: cjk400, weight: 400, style: "normal" },
-      { name: "Noto Sans SC", data: cjk900, weight: 900, style: "normal" },
+      { name: "Inter", data: inter400, weight: 400, style: "normal" },
+      { name: "Inter", data: inter700, weight: 700, style: "normal" },
+      { name: "Bebas", data: bebas, weight: 400, style: "normal" },
+      { name: "Playfair", data: playfair, weight: 400, style: "normal" },
     ],
   });
   const png = new Resvg(svg).render().asPng();
