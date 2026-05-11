@@ -2,9 +2,8 @@
  * GitHub Actions entry: read the workflow event payload, render the right
  * tier card, commit the PNG to the bot-cards branch, and post a comment.
  *
- * Triggered by .github/workflows/contributor-bot.yml on:
- *   - pull_request.closed (merged=true)  → Signal upgrade card
- *   - issues.opened                      → Spark welcome card
+ * Triggered by .github/workflows/contributor-bot.yml on contribution events.
+ * It only posts cards on first-touch Spark or tier crossings.
  *
  * Required env vars (provided by workflow):
  *   GH_APP_ID                  GitHub App ID (3640364)
@@ -43,6 +42,44 @@ const CJK_400_URL = "https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-sc@late
 const CJK_900_URL = "https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-sc@latest/chinese-simplified-900-normal.ttf";
 
 const CARDS_BRANCH = "bot-cards";
+const STATE_PATH = "data/contributor-card-state.json";
+
+type BotOctokit = ReturnType<typeof App.prototype.getInstallationOctokit> extends Promise<infer T> ? T : never;
+
+const TIER_ORDER: Record<TierKey, number> = {
+  spark: 0,
+  signal: 1,
+  node: 2,
+  beacon: 3,
+  nova: 4,
+};
+
+interface ContributorStats {
+  prsMerged: number;
+  reviews: number;
+  issuesOpened: number;
+  commentedThreads: number;
+}
+
+interface ContributorCardState {
+  generatedAt: string;
+  contributors: Record<string, ContributorStateEntry>;
+}
+
+interface ContributorStateEntry {
+  lastAnnouncedTier: TierKey;
+  lastKnownScore: number;
+  lastCheckedAt: string;
+  lastAnnouncedAt?: string;
+}
+
+interface EventContext {
+  actor: { login: string; avatar_url: string };
+  threadNumber?: number;
+  eventDelta: number;
+  canComment: boolean;
+  reason: string;
+}
 
 interface RenderArgs {
   owner: string;
@@ -56,7 +93,7 @@ interface RenderArgs {
   totalContributors: number;
 }
 
-async function renderAndPost(octokit: ReturnType<typeof App.prototype.getInstallationOctokit> extends Promise<infer T> ? T : never, args: RenderArgs) {
+async function renderAndPost(octokit: BotOctokit, args: RenderArgs, stats: ContributorStats) {
   const { owner, repo, threadNumber, author, tierKey, scenario, points, rank, totalContributors } = args;
   const tier = tierByKey(tierKey);
 
@@ -68,10 +105,10 @@ async function renderAndPost(octokit: ReturnType<typeof App.prototype.getInstall
     topPercent: totalContributors > 0 ? (rank / totalContributors) * 100 : 100,
     points,
     streakWeeks: 0,
-    prsMerged: scenario === "tier-up" ? 1 : 0,
-    reviews: 0,
+    prsMerged: stats.prsMerged,
+    reviews: stats.reviews,
     discussionsAnswered: 0,
-    issuesAccepted: scenario === "welcome-spark" ? 1 : 0,
+    issuesAccepted: stats.issuesOpened,
   };
 
   console.log(`🎨 Rendering ${tier.emoji} ${tier.nameEn} card for @${author.login}...`);
@@ -99,22 +136,10 @@ async function renderAndPost(octokit: ReturnType<typeof App.prototype.getInstall
   const ts = new Date().toISOString().replace(/[:.]/g, "-");
   const pngPath = `data/cards/${author.login}-${tierKey}-${ts}.png`;
 
-  console.log(`🌿 Ensuring branch '${CARDS_BRANCH}' exists ...`);
-  try {
-    await octokit.rest.git.getRef({ owner, repo, ref: `heads/${CARDS_BRANCH}` });
-    console.log(`   already exists`);
-  } catch (err: unknown) {
-    if (err && typeof err === "object" && "status" in err && (err as { status: number }).status === 404) {
-      const main = await octokit.rest.git.getRef({ owner, repo, ref: "heads/main" });
-      await octokit.rest.git.createRef({
-        owner, repo,
-        ref: `refs/heads/${CARDS_BRANCH}`,
-        sha: main.data.object.sha,
-      });
-      console.log(`   created from main`);
-    } else { throw err; }
-  }
+  await ensureCardsBranch(octokit, owner, repo);
 
+  console.log(`🌿 Using branch '${CARDS_BRANCH}' ...`);
+  console.log(`   ready`);
   console.log(`📤 Committing PNG to ${owner}/${repo}:${pngPath} on ${CARDS_BRANCH} ...`);
   const commit = await octokit.rest.repos.createOrUpdateFileContents({
     owner, repo, path: pngPath,
@@ -134,6 +159,188 @@ async function renderAndPost(octokit: ReturnType<typeof App.prototype.getInstall
     owner, repo, issue_number: threadNumber, body,
   });
   console.log(`   ✅ posted: ${comment.data.html_url}`);
+}
+
+async function ensureCardsBranch(octokit: BotOctokit, owner: string, repo: string) {
+  try {
+    await octokit.rest.git.getRef({ owner, repo, ref: `heads/${CARDS_BRANCH}` });
+  } catch (err: unknown) {
+    if (err && typeof err === "object" && "status" in err && (err as { status: number }).status === 404) {
+      const main = await octokit.rest.git.getRef({ owner, repo, ref: "heads/main" });
+      await octokit.rest.git.createRef({
+        owner, repo,
+        ref: `refs/heads/${CARDS_BRANCH}`,
+        sha: main.data.object.sha,
+      });
+    } else { throw err; }
+  }
+}
+
+async function searchCount(octokit: BotOctokit, q: string): Promise<number> {
+  const res = await octokit.rest.search.issuesAndPullRequests({ q, per_page: 1 });
+  return res.data.total_count;
+}
+
+async function fetchContributorStats(
+  octokit: BotOctokit,
+  owner: string,
+  repo: string,
+  login: string,
+): Promise<ContributorStats> {
+  const base = `repo:${owner}/${repo}`;
+  const [prsMerged, reviews, issuesOpened, commentedThreads] = await Promise.all([
+    searchCount(octokit, `${base} is:pr is:merged author:${login}`),
+    searchCount(octokit, `${base} is:pr reviewed-by:${login}`),
+    searchCount(octokit, `${base} is:issue author:${login}`),
+    searchCount(octokit, `${base} commenter:${login}`),
+  ]);
+
+  return { prsMerged, reviews, issuesOpened, commentedThreads };
+}
+
+function defaultState(): ContributorCardState {
+  return { generatedAt: new Date().toISOString(), contributors: {} };
+}
+
+async function readState(
+  octokit: BotOctokit,
+  owner: string,
+  repo: string,
+): Promise<{ state: ContributorCardState; sha?: string }> {
+  await ensureCardsBranch(octokit, owner, repo);
+
+  try {
+    const res = await octokit.rest.repos.getContent({
+      owner,
+      repo,
+      path: STATE_PATH,
+      ref: CARDS_BRANCH,
+    });
+    if (Array.isArray(res.data) || res.data.type !== "file" || !("content" in res.data)) {
+      return { state: defaultState() };
+    }
+
+    const json = Buffer.from(res.data.content, "base64").toString("utf8");
+    return { state: JSON.parse(json) as ContributorCardState, sha: res.data.sha };
+  } catch (err: unknown) {
+    if (err && typeof err === "object" && "status" in err && (err as { status: number }).status === 404) {
+      return { state: defaultState() };
+    }
+    throw err;
+  }
+}
+
+async function writeState(
+  octokit: BotOctokit,
+  owner: string,
+  repo: string,
+  state: ContributorCardState,
+  sha?: string,
+) {
+  state.generatedAt = new Date().toISOString();
+  await octokit.rest.repos.createOrUpdateFileContents({
+    owner,
+    repo,
+    path: STATE_PATH,
+    message: "chore(contributor-bot): update card state",
+    content: Buffer.from(`${JSON.stringify(state, null, 2)}\n`).toString("base64"),
+    branch: CARDS_BRANCH,
+    ...(sha ? { sha } : {}),
+  });
+}
+
+function extractContext(eventName: string, event: any): EventContext | null {
+  if (eventName === "pull_request_target" && event.action === "closed" && event.pull_request?.merged) {
+    return {
+      actor: event.pull_request.user,
+      threadNumber: event.pull_request.number,
+      eventDelta: 1,
+      canComment: true,
+      reason: "merged PR",
+    };
+  }
+
+  if (eventName === "issues" && event.action === "opened") {
+    return {
+      actor: event.issue.user,
+      threadNumber: event.issue.number,
+      eventDelta: 1,
+      canComment: true,
+      reason: "opened issue",
+    };
+  }
+
+  if (eventName === "pull_request_review" && event.action === "submitted") {
+    return {
+      actor: event.review.user,
+      threadNumber: event.pull_request.number,
+      eventDelta: 1,
+      canComment: true,
+      reason: "submitted PR review",
+    };
+  }
+
+  if (eventName === "issue_comment" && event.action === "created") {
+    return {
+      actor: event.comment.user,
+      threadNumber: event.issue.number,
+      eventDelta: 1,
+      canComment: true,
+      reason: "created issue/PR comment",
+    };
+  }
+
+  if (eventName === "pull_request_review_comment" && event.action === "created") {
+    return {
+      actor: event.comment.user,
+      threadNumber: event.pull_request.number,
+      eventDelta: 1,
+      canComment: true,
+      reason: "created PR review comment",
+    };
+  }
+
+  if (eventName === "discussion" && event.action === "created") {
+    return {
+      actor: event.discussion.user,
+      eventDelta: 1,
+      canComment: false,
+      reason: "created discussion",
+    };
+  }
+
+  if (eventName === "discussion_comment" && event.action === "created") {
+    return {
+      actor: event.comment.user,
+      eventDelta: 1,
+      canComment: false,
+      reason: "created discussion comment",
+    };
+  }
+
+  return null;
+}
+
+function shouldAnnounce(args: {
+  currentTier: TierKey;
+  existing?: ContributorStateEntry;
+}): { announce: boolean; scenario: "tier-up" | "welcome-spark"; tierKey: TierKey } {
+  const { currentTier, existing } = args;
+  if (existing) {
+    return {
+      announce: TIER_ORDER[currentTier] > TIER_ORDER[existing.lastAnnouncedTier],
+      scenario: currentTier === "spark" ? "welcome-spark" : "tier-up",
+      tierKey: currentTier,
+    };
+  }
+
+  // No state means the contributor has not received any recognition card yet.
+  // Announce their current tier once, then future events only announce upgrades.
+  return {
+    announce: true,
+    scenario: currentTier === "spark" ? "welcome-spark" : "tier-up",
+    tierKey: currentTier,
+  };
 }
 
 async function main() {
@@ -166,50 +373,68 @@ async function main() {
   const app = new App({ appId, privateKey });
   const octokit = await app.getInstallationOctokit(Number(installationId));
 
-  console.log(`📥 Event: ${eventName}.${event.action}`);
+  console.log(`📥 Event: ${eventName}.${event.action ?? "manual"}`);
+  const context = extractContext(eventName, event);
+  if (!context) {
+    console.log(`   skipping: ${eventName}.${event.action ?? "manual"} not handled`);
+    return;
+  }
 
-  if (eventName === "pull_request" && event.action === "closed" && event.pull_request?.merged) {
-    const author = event.pull_request.user;
-    if (!author || author.login.endsWith("[bot]")) {
-      console.log("   skipping: bot author");
-      return;
-    }
+  const author = context.actor;
+  if (!author || author.login.endsWith("[bot]")) {
+    console.log("   skipping: bot author");
+    return;
+  }
 
-    const vauntScore = await fetchVauntContributorScore(owner, repo, author.login);
-    const estimatedPoints = (vauntScore?.score ?? 0) + 1;
-    const tier = tierFromPoints(estimatedPoints);
-    const rank = vauntScore?.rank ?? 1;
-    const totalContributors = vauntScore?.totalFetched ?? 1;
+  const [vauntScore, stats, stateResult] = await Promise.all([
+    fetchVauntContributorScore(owner, repo, author.login),
+    fetchContributorStats(octokit, owner, repo, author.login),
+    readState(octokit, owner, repo),
+  ]);
 
+  const currentScore = (vauntScore?.score ?? 0) + context.eventDelta;
+  const currentTier = tierFromPoints(currentScore);
+  const rank = vauntScore?.rank ?? 1;
+  const totalContributors = vauntScore?.totalFetched ?? Math.max(1, rank);
+  const stateKey = author.login.toLowerCase();
+  const existing = stateResult.state.contributors[stateKey];
+  const decision = shouldAnnounce({
+    currentTier: currentTier.key,
+    existing,
+  });
+
+  console.log(
+    `   @${author.login}: ${currentScore} contributions, ${currentTier.nameEn}, ${context.reason}, announce=${decision.announce}`,
+  );
+
+  const threadNumber = context.threadNumber;
+  const didPostCard = decision.announce && context.canComment && threadNumber !== undefined;
+
+  if (didPostCard) {
     await renderAndPost(octokit, {
       owner, repo,
-      threadNumber: event.pull_request.number,
+      threadNumber,
       author: { login: author.login, avatar_url: author.avatar_url },
-      tierKey: tier.key,
-      scenario: tier.key === "spark" ? "welcome-spark" : "tier-up",
-      points: estimatedPoints,
+      tierKey: decision.tierKey,
+      scenario: decision.scenario,
+      points: currentScore,
       rank,
       totalContributors,
-    });
-  } else if (eventName === "issues" && event.action === "opened") {
-    const author = event.issue.user;
-    if (!author || author.login.endsWith("[bot]")) {
-      console.log("   skipping: bot author");
-      return;
-    }
-    await renderAndPost(octokit, {
-      owner, repo,
-      threadNumber: event.issue.number,
-      author: { login: author.login, avatar_url: author.avatar_url },
-      tierKey: "spark",
-      scenario: "welcome-spark",
-      points: 0,
-      rank: 1,
-      totalContributors: 1,
-    });
+    }, stats);
+  } else if (decision.announce && !context.canComment) {
+    console.log("   tier crossed, but this event has no supported GitHub comment surface yet");
   } else {
-    console.log(`   skipping: ${eventName}.${event.action} not handled`);
+    console.log("   no tier crossing; no card posted");
   }
+
+  const now = new Date().toISOString();
+  stateResult.state.contributors[stateKey] = {
+    lastAnnouncedTier: didPostCard ? decision.tierKey : existing?.lastAnnouncedTier ?? "spark",
+    lastKnownScore: currentScore,
+    lastCheckedAt: now,
+    ...(didPostCard ? { lastAnnouncedAt: now } : existing?.lastAnnouncedAt ? { lastAnnouncedAt: existing.lastAnnouncedAt } : {}),
+  };
+  await writeState(octokit, owner, repo, stateResult.state, stateResult.sha);
 }
 
 main().catch((err) => {

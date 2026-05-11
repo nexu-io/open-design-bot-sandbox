@@ -36,7 +36,7 @@ export function noTierUpComment(
   const remaining = next.threshold - card.points;
 
   return [
-    `<sub>+${pointsEarned} pts · ${card.points} total · ${remaining} to **${next.nameEn}** ${next.emoji}</sub>`,
+    `<sub>+${pointsEarned} contributions · ${card.points} total · ${remaining} to **${next.nameEn}** ${next.emoji}</sub>`,
   ].join("\n");
 }
 
