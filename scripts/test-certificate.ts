@@ -55,7 +55,6 @@ async function main() {
     ...SAMPLE,
     baseImageDataUrl,
     tierNameEn: "Da Vinci",
-    sloganEn: "Lit the first spark.",
   });
 
   const svg = await satori(node as Parameters<typeof satori>[0], {

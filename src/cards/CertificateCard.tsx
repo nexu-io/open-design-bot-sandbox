@@ -3,8 +3,9 @@ import type { CardProps } from "./types.ts";
 export interface CertificateCardProps extends CardProps {
   baseImageDataUrl: string;
   tierNameEn: string;
-  sloganEn: string;
 }
+
+const SLOGAN = "Lit the first spark.";
 
 const W = 941;
 const H = 1672;
@@ -186,7 +187,7 @@ export function CertificateCard(p: CertificateCardProps) {
           letterSpacing: -0.5,
         }}
       >
-        {p.sloganEn}
+        {SLOGAN}
       </div>
     </div>
   );
