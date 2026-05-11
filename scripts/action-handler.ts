@@ -323,12 +323,9 @@ function extractContext(eventName: string, event: any): EventContext | null {
 
 function shouldAnnounce(args: {
   currentTier: TierKey;
-  currentScore: number;
-  previousScore: number;
   existing?: ContributorStateEntry;
-  stats: ContributorStats;
 }): { announce: boolean; scenario: "tier-up" | "welcome-spark"; tierKey: TierKey } {
-  const { currentTier, currentScore, previousScore, existing, stats } = args;
+  const { currentTier, existing } = args;
   if (existing) {
     return {
       announce: TIER_ORDER[currentTier] > TIER_ORDER[existing.lastAnnouncedTier],
@@ -337,17 +334,13 @@ function shouldAnnounce(args: {
     };
   }
 
-  const previousTier = tierFromPoints(previousScore).key;
-  if (TIER_ORDER[currentTier] > TIER_ORDER[previousTier]) {
-    return { announce: true, scenario: currentTier === "spark" ? "welcome-spark" : "tier-up", tierKey: currentTier };
-  }
-
-  const publicActivityCount = stats.prsMerged + stats.reviews + stats.issuesOpened + stats.commentedThreads;
-  if (currentTier === "spark" && currentScore < tierByKey("signal").threshold && publicActivityCount <= 1) {
-    return { announce: true, scenario: "welcome-spark", tierKey: "spark" };
-  }
-
-  return { announce: false, scenario: currentTier === "spark" ? "welcome-spark" : "tier-up", tierKey: currentTier };
+  // No state means the contributor has not received any recognition card yet.
+  // Announce their current tier once, then future events only announce upgrades.
+  return {
+    announce: true,
+    scenario: currentTier === "spark" ? "welcome-spark" : "tier-up",
+    tierKey: currentTier,
+  };
 }
 
 async function main() {
@@ -400,7 +393,6 @@ async function main() {
   ]);
 
   const currentScore = (vauntScore?.score ?? 0) + context.eventDelta;
-  const previousScore = Math.max(0, currentScore - context.eventDelta);
   const currentTier = tierFromPoints(currentScore);
   const rank = vauntScore?.rank ?? 1;
   const totalContributors = vauntScore?.totalFetched ?? Math.max(1, rank);
@@ -408,20 +400,20 @@ async function main() {
   const existing = stateResult.state.contributors[stateKey];
   const decision = shouldAnnounce({
     currentTier: currentTier.key,
-    currentScore,
-    previousScore: existing?.lastKnownScore ?? previousScore,
     existing,
-    stats,
   });
 
   console.log(
     `   @${author.login}: ${currentScore} contributions, ${currentTier.nameEn}, ${context.reason}, announce=${decision.announce}`,
   );
 
-  if (decision.announce && context.canComment && context.threadNumber !== undefined) {
+  const threadNumber = context.threadNumber;
+  const didPostCard = decision.announce && context.canComment && threadNumber !== undefined;
+
+  if (didPostCard) {
     await renderAndPost(octokit, {
       owner, repo,
-      threadNumber: context.threadNumber,
+      threadNumber,
       author: { login: author.login, avatar_url: author.avatar_url },
       tierKey: decision.tierKey,
       scenario: decision.scenario,
@@ -437,10 +429,10 @@ async function main() {
 
   const now = new Date().toISOString();
   stateResult.state.contributors[stateKey] = {
-    lastAnnouncedTier: decision.announce ? decision.tierKey : currentTier.key,
+    lastAnnouncedTier: didPostCard ? decision.tierKey : existing?.lastAnnouncedTier ?? "spark",
     lastKnownScore: currentScore,
     lastCheckedAt: now,
-    ...(decision.announce ? { lastAnnouncedAt: now } : existing?.lastAnnouncedAt ? { lastAnnouncedAt: existing.lastAnnouncedAt } : {}),
+    ...(didPostCard ? { lastAnnouncedAt: now } : existing?.lastAnnouncedAt ? { lastAnnouncedAt: existing.lastAnnouncedAt } : {}),
   };
   await writeState(octokit, owner, repo, stateResult.state, stateResult.sha);
 }
