@@ -20,6 +20,8 @@ export function CertificateCard(p: CertificateCardProps) {
     : p.topPercent < 10
     ? p.topPercent.toFixed(1).replace(/\.0$/, "")
     : p.topPercent.toFixed(0);
+  const percentFontSize = topPct.length >= 5 ? 200 : 280;
+  const percentLeft = topPct.length >= 5 ? 315 : 410;
   const points = p.points.toLocaleString();
   const tierLabel = `${p.tierNameEn.toUpperCase()} TIER`;
 
@@ -90,10 +92,10 @@ export function CertificateCard(p: CertificateCardProps) {
         style={{
           position: "absolute",
           top: 470,
-          left: 410,
+          left: percentLeft,
           display: "flex",
           color: INK,
-          fontSize: 280,
+          fontSize: percentFontSize,
           fontFamily: "Bebas",
           fontWeight: 700,
           letterSpacing: 0,
