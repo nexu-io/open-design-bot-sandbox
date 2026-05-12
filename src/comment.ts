@@ -1,6 +1,7 @@
 import type { CardProps } from "./cards/types.ts";
 import { tierFromPoints, nextTier } from "./tier.ts";
 import { xShareUrl } from "./share.ts";
+import { rankSummary } from "./rank.ts";
 
 export function tierUpComment(card: CardProps, cardImageUrl: string): string {
   const tier = tierFromPoints(card.points);
@@ -18,7 +19,7 @@ export function tierUpComment(card: CardProps, cardImageUrl: string): string {
     ``,
     `---`,
     ``,
-    `📊 Top ${card.topPercent.toFixed(1)}% · Rank #${card.rank.toLocaleString()} of ${card.totalContributors.toLocaleString()}`,
+    `📊 ${rankSummary(card.rank, card.totalContributors)}`,
     ``,
     `🔗 [Share on X (English)](${xUrl}) · [分享到 X（中文）](${xUrlCn})`,
     ``,

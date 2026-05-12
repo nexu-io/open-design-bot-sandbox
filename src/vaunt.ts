@@ -9,6 +9,11 @@ export interface VauntContributorScore {
   totalFetched: number;
 }
 
+export interface VauntContributorLookup {
+  score: VauntContributorScore | null;
+  totalContributors: number;
+}
+
 interface VauntContributor {
   name: string;
   display_name: string;
@@ -48,10 +53,20 @@ export async function fetchVauntContributorScore(
   repo: string,
   login: string,
 ): Promise<VauntContributorScore | null> {
+  const lookup = await fetchVauntContributorLookup(owner, repo, login);
+  return lookup.score;
+}
+
+export async function fetchVauntContributorLookup(
+  owner: string,
+  repo: string,
+  login: string,
+): Promise<VauntContributorLookup> {
   const target = login.toLowerCase();
   let cursor: string | undefined;
   let rank = 0;
-  let totalFetched = 0;
+  let match: Omit<VauntContributorScore, "totalFetched"> | null = null;
+  const seen = new Set<string>();
 
   while (true) {
     const url = new URL(`${API_BASE}/github/entities/${owner}/repositories/${repo}/contributors`);
@@ -65,26 +80,42 @@ export async function fetchVauntContributorScore(
 
     const payload = (await response.json()) as VauntContributorsResponse;
     const humans = payload.data.filter((contributor) => !isBot(contributor));
+    const minHumanScore = Math.min(...humans.map((contributor) => contributor.contributions));
     for (const contributor of humans) {
+      const key = contributor.name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
       rank += 1;
-      if (contributor.name.toLowerCase() === target) {
-        return {
+      if (key === target) {
+        match = {
           login: contributor.name,
           score: contributor.contributions,
           rank,
-          totalFetched: Math.max(rank, totalFetched + humans.length),
         };
       }
     }
 
-    totalFetched += humans.length;
-
-    const minScoreOnPage = Math.min(...payload.data.map((contributor) => contributor.contributions));
-    if (!payload.next_cursor || minScoreOnPage < MIN_SIGNAL_SCORE) {
-      return null;
+    if (match && minHumanScore < match.score) {
+      break;
     }
 
-    if (payload.next_cursor === cursor) return null;
+    if (!payload.next_cursor) {
+      break;
+    }
+
+    if (payload.next_cursor === cursor) {
+      break;
+    }
+
+    if (!match && minHumanScore < MIN_SIGNAL_SCORE) {
+      break;
+    }
+
     cursor = payload.next_cursor;
   }
+
+  return {
+    score: match ? { ...match, totalFetched: seen.size } : null,
+    totalContributors: seen.size,
+  };
 }

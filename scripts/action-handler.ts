@@ -23,7 +23,7 @@ import type { CardProps, TierKey } from "../src/cards/types.ts";
 import { CertificateCard } from "../src/cards/CertificateCard.tsx";
 import { tierByKey, tierFromPoints } from "../src/tier.ts";
 import { tierUpComment, welcomeSparkComment } from "../src/comment.ts";
-import { fetchVauntContributorScore } from "../src/vaunt.ts";
+import { fetchVauntContributorLookup } from "../src/vaunt.ts";
 
 const FONT_INTER_400_URL = "https://cdn.jsdelivr.net/fontsource/fonts/inter@latest/latin-400-normal.ttf";
 const FONT_INTER_700_URL = "https://cdn.jsdelivr.net/fontsource/fonts/inter@latest/latin-700-normal.ttf";
@@ -386,16 +386,17 @@ async function main() {
   console.log(`   runtime repo: ${owner}/${repo}`);
   console.log(`   score repo: ${scoreOwner}/${scoreRepo}`);
 
-  const [vauntScore, stats, stateResult] = await Promise.all([
-    fetchVauntContributorScore(scoreOwner, scoreRepo, author.login),
+  const [vauntLookup, stats, stateResult] = await Promise.all([
+    fetchVauntContributorLookup(scoreOwner, scoreRepo, author.login),
     fetchContributorStats(octokit, scoreOwner, scoreRepo, author.login),
     readState(octokit, owner, repo),
   ]);
 
+  const vauntScore = vauntLookup.score;
   const currentScore = (vauntScore?.score ?? 0) + context.eventDelta;
   const currentTier = tierFromPoints(currentScore);
   const rank = vauntScore?.rank ?? 1;
-  const totalContributors = vauntScore?.totalFetched ?? Math.max(1, rank);
+  const totalContributors = Math.max(vauntLookup.totalContributors, rank);
   const stateKey = author.login.toLowerCase();
   const existing = stateResult.state.contributors[stateKey];
   const decision = shouldAnnounce({
