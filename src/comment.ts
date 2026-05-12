@@ -13,9 +13,9 @@ export function tierUpComment(card: CardProps, cardImageUrl: string): string {
     ``,
     `<img src="${cardImageUrl}" width="540" alt="${tier.nameEn} card for @${card.username}" />`,
     ``,
-    `> *${tier.sloganEn}*`,
+    `> ${tier.emoji} *${tier.sloganEn}*`,
     ``,
-    `**${tier.encouragementEn}**`,
+    `🙌 **${tier.encouragementEn}**`,
     ``,
     `---`,
     ``,
@@ -47,9 +47,9 @@ export function welcomeSparkComment(card: CardProps, cardImageUrl: string): stri
     ``,
     `<img src="${cardImageUrl}" width="420" alt="Spark card for @${card.username}" />`,
     ``,
-    `> *Lit the first spark.*`,
+    `> ✨ *Lit the first spark.*`,
     ``,
-    `Every great contribution starts with a single spark. You showed up — that's the hardest step.`,
+    `🌱 Every great contribution starts with a single spark. You showed up — that's the hardest step.`,
     ``,
   ].join("\n");
 }
