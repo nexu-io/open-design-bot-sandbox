@@ -1,11 +1,9 @@
 import type { CardProps } from "./cards/types.ts";
 import { tierFromPoints, nextTier } from "./tier.ts";
-import { xShareUrl } from "./share.ts";
 import { rankSummary } from "./rank.ts";
 
 export function tierUpComment(card: CardProps, cardImageUrl: string): string {
   const tier = tierFromPoints(card.points);
-  const xUrl = xShareUrl(card, "en");
 
   return [
     `### 🎉 ${tier.emoji} You just leveled up to **${tier.nameEn}**`,
@@ -21,10 +19,6 @@ export function tierUpComment(card: CardProps, cardImageUrl: string): string {
     `---`,
     ``,
     `📊 ${rankSummary(card.rank, card.totalContributors)}`,
-    ``,
-    `🔗 [Share on X](${xUrl})`,
-    ``,
-    `<sub>Open Design contributor recognition · [opt out with the \`.no-bot\` label](https://github.com/nexu-io/open-design#contributor-bot)</sub>`,
   ].join("\n");
 }
 
