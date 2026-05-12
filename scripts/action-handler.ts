@@ -33,6 +33,16 @@ const CERTIFICATE_BASE_PATH = "assets/certificate-base.png";
 
 const CARDS_BRANCH = "bot-cards";
 const STATE_PATH = "data/contributor-card-state.json";
+const SCORE_VERSION = "weighted-v1";
+
+const SCORE_WEIGHTS = {
+  firstMergedPr: 30,
+  subsequentMergedPr: 12,
+  review: 3,
+  issueOpened: 5,
+  comment: 1,
+  discussion: 2,
+} as const;
 
 type BotOctokit = ReturnType<typeof App.prototype.getInstallationOctokit> extends Promise<infer T> ? T : never;
 
@@ -61,6 +71,7 @@ interface ContributorStateEntry {
   lastKnownScore: number;
   lastCheckedAt: string;
   lastAnnouncedAt?: string;
+  scoreVersion?: typeof SCORE_VERSION;
 }
 
 interface EventContext {
@@ -198,20 +209,52 @@ function contributorActivityCount(stats: ContributorStats): number {
   return stats.prsMerged + stats.reviews + stats.issuesOpened + stats.commentedThreads;
 }
 
+function weightedScoreFromStats(stats: ContributorStats): number {
+  const prScore = stats.prsMerged > 0
+    ? SCORE_WEIGHTS.firstMergedPr + Math.max(0, stats.prsMerged - 1) * SCORE_WEIGHTS.subsequentMergedPr
+    : 0;
+
+  return (
+    prScore +
+    stats.reviews * SCORE_WEIGHTS.review +
+    stats.issuesOpened * SCORE_WEIGHTS.issueOpened +
+    stats.commentedThreads * SCORE_WEIGHTS.comment
+  );
+}
+
+function eventScoreFloor(context: EventContext, stats: ContributorStats): number {
+  switch (context.reason) {
+    case "merged PR":
+      return stats.prsMerged <= 1 ? SCORE_WEIGHTS.firstMergedPr : SCORE_WEIGHTS.subsequentMergedPr;
+    case "opened issue":
+      return SCORE_WEIGHTS.issueOpened;
+    case "submitted PR review":
+      return SCORE_WEIGHTS.review;
+    case "created issue/PR comment":
+    case "created PR review comment":
+      return SCORE_WEIGHTS.comment;
+    case "created discussion":
+    case "created discussion comment":
+      return SCORE_WEIGHTS.discussion;
+    default:
+      return context.eventDelta;
+  }
+}
+
 function resolveCurrentScore(args: {
   vauntScore?: number;
   stats: ContributorStats;
   existing?: ContributorStateEntry;
-  eventDelta: number;
-}): { currentScore: number; sources: { vaunt: number; github: number; state: number; event: number } } {
-  const vaunt = args.vauntScore ?? 0;
-  const github = contributorActivityCount(args.stats);
-  const state = args.existing ? args.existing.lastKnownScore + args.eventDelta : 0;
-  const event = args.eventDelta;
+  context: EventContext;
+}): { currentScore: number; sources: { vauntRankScore: number; githubWeighted: number; state: number; event: number } } {
+  const vauntRankScore = args.vauntScore ?? 0;
+  const githubWeighted = weightedScoreFromStats(args.stats);
+  const event = eventScoreFloor(args.context, args.stats);
+  const state = args.existing?.scoreVersion === SCORE_VERSION ? args.existing.lastKnownScore + event : 0;
 
   return {
-    currentScore: Math.max(vaunt, github, state, event),
-    sources: { vaunt, github, state, event },
+    currentScore: Math.max(githubWeighted, state, event),
+    sources: { vauntRankScore, githubWeighted, state, event },
   };
 }
 
@@ -421,7 +464,7 @@ async function main() {
     vauntScore: vauntScore?.score,
     stats,
     existing,
-    eventDelta: context.eventDelta,
+    context,
   });
   const currentTier = tierFromPoints(currentScore);
   const rank = vauntScore?.rank ?? vauntLookup.totalContributors + 1;
@@ -433,7 +476,7 @@ async function main() {
 
   console.log(
     `   @${author.login}: ${currentScore} contributions, ${currentTier.nameEn}, ${context.reason}, announce=${decision.announce} ` +
-    `(sources: vaunt=${sources.vaunt}, github=${sources.github}, state=${sources.state}, event=${sources.event})`,
+    `(sources: vauntRankScore=${sources.vauntRankScore}, githubWeighted=${sources.githubWeighted}, state=${sources.state}, event=${sources.event})`,
   );
 
   const threadNumber = context.threadNumber;
@@ -461,6 +504,7 @@ async function main() {
     lastAnnouncedTier: didPostCard ? decision.tierKey : existing?.lastAnnouncedTier ?? "spark",
     lastKnownScore: currentScore,
     lastCheckedAt: now,
+    scoreVersion: SCORE_VERSION,
     ...(didPostCard ? { lastAnnouncedAt: now } : existing?.lastAnnouncedAt ? { lastAnnouncedAt: existing.lastAnnouncedAt } : {}),
   };
   await writeState(octokit, owner, repo, stateResult.state, stateResult.sha);
