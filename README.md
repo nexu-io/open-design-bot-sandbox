@@ -46,8 +46,9 @@ The bot's comment looks like this (pulled from a real test):
 
 1. `.github/workflows/contributor-bot.yml` triggers on `pull_request.closed` (merged) and `issues.opened`.
 2. `scripts/action-handler.ts` reads the event payload, renders a 1080×1080 PNG card with your avatar via Satori + resvg.
-3. The PNG is committed to the `bot-cards` branch.
-4. The bot comments on your thread with the card embedded.
+3. In this sandbox, `SCORE_REPO_OWNER=nexu-io` and `SCORE_REPO_NAME=open-design` make the card use real Open Design contribution data for tier and stats.
+4. The PNG is committed to this sandbox repo's `bot-cards` branch.
+5. The bot comments on your sandbox thread with the card embedded.
 
 ---
 

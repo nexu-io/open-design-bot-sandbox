@@ -44,4 +44,6 @@ jobs:
           BOT_APP_ID: ${{ secrets.BOT_APP_ID }}
           BOT_APP_INSTALLATION_ID: ${{ secrets.BOT_APP_INSTALLATION_ID }}
           BOT_APP_PRIVATE_KEY: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+          SCORE_REPO_OWNER: nexu-io
+          SCORE_REPO_NAME: open-design
         run: pnpm exec tsx scripts/action-handler.ts
