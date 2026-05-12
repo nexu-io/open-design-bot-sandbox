@@ -394,7 +394,8 @@ async function main() {
   ]);
 
   const vauntScore = vauntLookup.score;
-  const currentScore = (vauntScore?.score ?? 0) + context.eventDelta;
+  const githubActivityScore = stats.prsMerged + stats.reviews + stats.issuesOpened + stats.commentedThreads;
+  const currentScore = Math.max((vauntScore?.score ?? 0) + context.eventDelta, githubActivityScore);
   const currentTier = tierFromPoints(currentScore);
   const rank = vauntScore?.rank ?? vauntLookup.totalContributors + 1;
   const totalContributors = Math.max(vauntLookup.totalContributors, rank);
