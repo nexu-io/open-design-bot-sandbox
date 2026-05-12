@@ -194,6 +194,27 @@ async function fetchContributorStats(
   return { prsMerged, reviews, issuesOpened, commentedThreads };
 }
 
+function contributorActivityCount(stats: ContributorStats): number {
+  return stats.prsMerged + stats.reviews + stats.issuesOpened + stats.commentedThreads;
+}
+
+function resolveCurrentScore(args: {
+  vauntScore?: number;
+  stats: ContributorStats;
+  existing?: ContributorStateEntry;
+  eventDelta: number;
+}): { currentScore: number; sources: { vaunt: number; github: number; state: number; event: number } } {
+  const vaunt = args.vauntScore ?? 0;
+  const github = contributorActivityCount(args.stats);
+  const state = args.existing ? args.existing.lastKnownScore + args.eventDelta : 0;
+  const event = args.eventDelta;
+
+  return {
+    currentScore: Math.max(vaunt, github, state, event),
+    sources: { vaunt, github, state, event },
+  };
+}
+
 function defaultState(): ContributorCardState {
   return { generatedAt: new Date().toISOString(), contributors: {} };
 }
@@ -394,20 +415,25 @@ async function main() {
   ]);
 
   const vauntScore = vauntLookup.score;
-  const githubActivityScore = stats.prsMerged + stats.reviews + stats.issuesOpened + stats.commentedThreads;
-  const currentScore = Math.max((vauntScore?.score ?? 0) + context.eventDelta, githubActivityScore);
+  const stateKey = author.login.toLowerCase();
+  const existing = stateResult.state.contributors[stateKey];
+  const { currentScore, sources } = resolveCurrentScore({
+    vauntScore: vauntScore?.score,
+    stats,
+    existing,
+    eventDelta: context.eventDelta,
+  });
   const currentTier = tierFromPoints(currentScore);
   const rank = vauntScore?.rank ?? vauntLookup.totalContributors + 1;
   const totalContributors = Math.max(vauntLookup.totalContributors, rank);
-  const stateKey = author.login.toLowerCase();
-  const existing = stateResult.state.contributors[stateKey];
   const decision = shouldAnnounce({
     currentTier: currentTier.key,
     existing,
   });
 
   console.log(
-    `   @${author.login}: ${currentScore} contributions, ${currentTier.nameEn}, ${context.reason}, announce=${decision.announce}`,
+    `   @${author.login}: ${currentScore} contributions, ${currentTier.nameEn}, ${context.reason}, announce=${decision.announce} ` +
+    `(sources: vaunt=${sources.vaunt}, github=${sources.github}, state=${sources.state}, event=${sources.event})`,
   );
 
   const threadNumber = context.threadNumber;
