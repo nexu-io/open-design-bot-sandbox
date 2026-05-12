@@ -92,7 +92,7 @@ async function renderAndPost(octokit: BotOctokit, args: RenderArgs, stats: Contr
     avatarUrl: author.avatar_url,
     rank,
     totalContributors,
-    topPercent: totalContributors > 0 ? (rank / totalContributors) * 100 : 100,
+    topPercent: totalContributors > 0 ? Math.min((rank / totalContributors) * 100, 99.99) : 99.99,
     points,
     streakWeeks: 0,
     prsMerged: stats.prsMerged,
@@ -145,8 +145,9 @@ async function renderAndPost(octokit: BotOctokit, args: RenderArgs, stats: Contr
   const pngUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${CARDS_BRANCH}/${pngPath}`;
   console.log(`   ✅ committed: ${commit.data.commit.html_url}`);
 
+  const activityCount = stats.prsMerged + stats.reviews + stats.issuesOpened + stats.commentedThreads;
   const body = scenario === "welcome-spark"
-    ? welcomeSparkComment(cardProps, pngUrl)
+    ? welcomeSparkComment(cardProps, pngUrl, activityCount <= 1)
     : tierUpComment(cardProps, pngUrl);
 
   console.log(`💬 Posting comment on #${threadNumber} ...`);

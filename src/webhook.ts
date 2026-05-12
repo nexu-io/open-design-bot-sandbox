@@ -296,7 +296,7 @@ export async function handleIssueOpened(
       owner: env.GH_REPO_OWNER,
       repo: env.GH_REPO_NAME,
       issue_number: payload.issue.number,
-      body: welcomeSparkComment(cardProps, cardUrl),
+      body: welcomeSparkComment(cardProps, cardUrl, true),
     },
   );
 }

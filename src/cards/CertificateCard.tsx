@@ -5,7 +5,7 @@ export interface CertificateCardProps extends CardProps {
   tierNameEn: string;
 }
 
-const SLOGAN = "Lit the first spark.";
+const SLOGAN = "Lit the spark.";
 
 const W = 941;
 const H = 1672;
@@ -15,7 +15,9 @@ const ORANGE = "#C2532D";
 const PLAQUE_GOLD = "#9C7B3F";
 
 export function CertificateCard(p: CertificateCardProps) {
-  const topPct = p.topPercent < 10
+  const topPct = p.topPercent >= 99
+    ? p.topPercent.toFixed(2).replace(/\.00$/, "")
+    : p.topPercent < 10
     ? p.topPercent.toFixed(1).replace(/\.0$/, "")
     : p.topPercent.toFixed(0);
   const points = p.points.toLocaleString();

@@ -36,15 +36,19 @@ export function noTierUpComment(
   ].join("\n");
 }
 
-export function welcomeSparkComment(card: CardProps, cardImageUrl: string): string {
+export function welcomeSparkComment(card: CardProps, cardImageUrl: string, isFirstContribution: boolean): string {
+  const body = isFirstContribution
+    ? `🌱 Your first contribution adds energy to the project. Thanks for showing up and helping Open Design grow.`
+    : `🌱 Every contribution adds energy to the project. Thanks for showing up and helping Open Design grow.`;
+
   return [
     `### 🎉 ✨ Welcome to **Open Design**, @${card.username}!`,
     ``,
     `<img src="${cardImageUrl}" width="420" alt="Spark card for @${card.username}" />`,
     ``,
-    `> ✨ 🔥 *Lit the first spark.*`,
+    `> ✨ 🔥 *Lit the spark.*`,
     ``,
-    `🌱 Every great contribution starts with a single spark. You showed up — that's the hardest step.`,
+    body,
     ``,
     `💛 Thanks for helping Open Design grow. Keep building in the open. 🚀`,
     ``,
