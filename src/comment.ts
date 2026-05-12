@@ -51,6 +51,5 @@ export function welcomeSparkComment(card: CardProps, cardImageUrl: string): stri
     ``,
     `Every great contribution starts with a single spark. You showed up — that's the hardest step.`,
     ``,
-    `<sub>Track your progress on the [contributor leaderboard](https://github.com/nexu-io/open-design/blob/main/CONTRIBUTORS.md)</sub>`,
   ].join("\n");
 }
