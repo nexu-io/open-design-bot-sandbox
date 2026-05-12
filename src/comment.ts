@@ -6,22 +6,23 @@ import { rankSummary } from "./rank.ts";
 export function tierUpComment(card: CardProps, cardImageUrl: string): string {
   const tier = tierFromPoints(card.points);
   const xUrl = xShareUrl(card, "en");
-  const xUrlCn = xShareUrl(card, "cn");
 
   return [
-    `### ${tier.emoji} You just leveled up to **${tier.nameEn}** (${tier.nameCn})`,
+    `### 🎉 ${tier.emoji} You just leveled up to **${tier.nameEn}**`,
     ``,
     `<img src="${cardImageUrl}" width="540" alt="${tier.nameEn} card for @${card.username}" />`,
     ``,
-    `> *${tier.sloganEn}*`,
+    `> ${tier.emoji} ✨ *${tier.sloganEn}*`,
     ``,
-    `**${tier.encouragementEn}**`,
+    `🙌 **${tier.encouragementEn}**`,
+    ``,
+    `💛 Thanks for helping Open Design move forward. Keep building in the open. 🚀`,
     ``,
     `---`,
     ``,
     `📊 ${rankSummary(card.rank, card.totalContributors)}`,
     ``,
-    `🔗 [Share on X (English)](${xUrl}) · [分享到 X（中文）](${xUrlCn})`,
+    `🔗 [Share on X](${xUrl})`,
     ``,
     `<sub>Open Design contributor recognition · [opt out with the \`.no-bot\` label](https://github.com/nexu-io/open-design#contributor-bot)</sub>`,
   ].join("\n");
@@ -43,14 +44,15 @@ export function noTierUpComment(
 
 export function welcomeSparkComment(card: CardProps, cardImageUrl: string): string {
   return [
-    `### ✨ Welcome to **Open Design**, @${card.username}!`,
+    `### 🎉 ✨ Welcome to **Open Design**, @${card.username}!`,
     ``,
     `<img src="${cardImageUrl}" width="420" alt="Spark card for @${card.username}" />`,
     ``,
-    `> *Lit the first spark.*`,
+    `> ✨ 🔥 *Lit the first spark.*`,
     ``,
-    `Every great contribution starts with a single spark. You showed up — that's the hardest step.`,
+    `🌱 Every great contribution starts with a single spark. You showed up — that's the hardest step.`,
     ``,
-    `<sub>Track your progress on the [contributor leaderboard](https://github.com/nexu-io/open-design/blob/main/CONTRIBUTORS.md)</sub>`,
+    `💛 Thanks for helping Open Design grow. Keep building in the open. 🚀`,
+    ``,
   ].join("\n");
 }
