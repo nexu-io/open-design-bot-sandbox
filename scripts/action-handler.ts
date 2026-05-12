@@ -92,7 +92,7 @@ async function renderAndPost(octokit: BotOctokit, args: RenderArgs, stats: Contr
     avatarUrl: author.avatar_url,
     rank,
     totalContributors,
-    topPercent: totalContributors > 0 ? Math.min((rank / totalContributors) * 100, 99) : 99,
+    topPercent: totalContributors > 0 ? Math.min((rank / totalContributors) * 100, 99.99) : 99.99,
     points,
     streakWeeks: 0,
     prsMerged: stats.prsMerged,
