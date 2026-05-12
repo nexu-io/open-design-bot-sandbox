@@ -9,13 +9,15 @@ export function tierUpComment(card: CardProps, cardImageUrl: string): string {
   const xUrlCn = xShareUrl(card, "cn");
 
   return [
-    `### ${tier.emoji} You just leveled up to **${tier.nameEn}** (${tier.nameCn})`,
+    `### 🎉 ${tier.emoji} You just leveled up to **${tier.nameEn}** (${tier.nameCn})`,
     ``,
     `<img src="${cardImageUrl}" width="540" alt="${tier.nameEn} card for @${card.username}" />`,
     ``,
-    `> ${tier.emoji} *${tier.sloganEn}*`,
+    `> ${tier.emoji} ✨ *${tier.sloganEn}*`,
     ``,
     `🙌 **${tier.encouragementEn}**`,
+    ``,
+    `💛 Thanks for helping Open Design move forward. Keep building in the open. 🚀`,
     ``,
     `---`,
     ``,
@@ -43,13 +45,15 @@ export function noTierUpComment(
 
 export function welcomeSparkComment(card: CardProps, cardImageUrl: string): string {
   return [
-    `### ✨ Welcome to **Open Design**, @${card.username}!`,
+    `### 🎉 ✨ Welcome to **Open Design**, @${card.username}!`,
     ``,
     `<img src="${cardImageUrl}" width="420" alt="Spark card for @${card.username}" />`,
     ``,
-    `> ✨ *Lit the first spark.*`,
+    `> ✨ 🔥 *Lit the first spark.*`,
     ``,
     `🌱 Every great contribution starts with a single spark. You showed up — that's the hardest step.`,
+    ``,
+    `💛 Thanks for helping Open Design grow. Keep building in the open. 🚀`,
     ``,
   ].join("\n");
 }
