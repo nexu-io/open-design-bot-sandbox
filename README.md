@@ -26,6 +26,8 @@ You're an internal tester. To see the bot in action, do **either** of these:
 
 That's it. Open a few PRs/issues with different accounts and watch the cards stack up.
 
+Small README edits are a good smoke test for the PR comment workflow.
+
 ---
 
 ## What you should see
