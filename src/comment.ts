@@ -44,7 +44,7 @@ export function welcomeSparkComment(card: CardProps, cardImageUrl: string): stri
     ``,
     `> ✨ 🔥 *Lit the first spark.*`,
     ``,
-    `🌱 Every great contribution starts with a single spark. You showed up — that's the hardest step.`,
+    `🌱 Every contribution adds energy to the project. Thanks for showing up and helping Open Design grow.`,
     ``,
     `💛 Thanks for helping Open Design grow. Keep building in the open. 🚀`,
     ``,

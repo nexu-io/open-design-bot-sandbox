@@ -38,7 +38,7 @@ export const TIERS: ReadonlyArray<TierDef> = [
     sloganEn: "Sending steady signals.",
     sloganCn: "发出第一道信号。",
     encouragementEn:
-      "Your first contribution didn't just merge code — it sent a signal across the network: \"I'm here, and I care.\" Keep transmitting.",
+      "Your contributions are sending a clear signal across the network: you care about making Open Design better. Keep transmitting.",
     encouragementCn:
       "你的第一次贡献不只是合入了代码——它向整个网络发出了一个信号：\"我在这里，我用心了\"。继续发声。",
   },
