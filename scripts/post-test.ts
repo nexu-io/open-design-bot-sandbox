@@ -250,7 +250,7 @@ async function main() {
   console.log(`   raw URL: ${pngUrl}`);
 
   const baseMd = useWelcome
-    ? welcomeSparkComment(cardProps, pngUrl)
+    ? welcomeSparkComment(cardProps, pngUrl, true)
     : tierUpComment(cardProps, pngUrl);
   const commentMd = prefix
     ? `<!-- internal test by open-design-bot -->\n**${prefix.trim()}**\n\n${baseMd}`
