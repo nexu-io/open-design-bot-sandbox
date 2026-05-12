@@ -395,7 +395,7 @@ async function main() {
   const vauntScore = vauntLookup.score;
   const currentScore = (vauntScore?.score ?? 0) + context.eventDelta;
   const currentTier = tierFromPoints(currentScore);
-  const rank = vauntScore?.rank ?? 1;
+  const rank = vauntScore?.rank ?? vauntLookup.totalContributors + 1;
   const totalContributors = Math.max(vauntLookup.totalContributors, rank);
   const stateKey = author.login.toLowerCase();
   const existing = stateResult.state.contributors[stateKey];
