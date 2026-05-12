@@ -353,6 +353,8 @@ async function main() {
     console.error(`❌ Invalid GITHUB_REPOSITORY: ${repository}`);
     process.exit(1);
   }
+  const scoreOwner = process.env.SCORE_REPO_OWNER || owner;
+  const scoreRepo = process.env.SCORE_REPO_NAME || repo;
 
   const event = JSON.parse(readFileSync(eventPath, "utf8"));
 
@@ -381,9 +383,12 @@ async function main() {
     return;
   }
 
+  console.log(`   runtime repo: ${owner}/${repo}`);
+  console.log(`   score repo: ${scoreOwner}/${scoreRepo}`);
+
   const [vauntScore, stats, stateResult] = await Promise.all([
-    fetchVauntContributorScore(owner, repo, author.login),
-    fetchContributorStats(octokit, owner, repo, author.login),
+    fetchVauntContributorScore(scoreOwner, scoreRepo, author.login),
+    fetchContributorStats(octokit, scoreOwner, scoreRepo, author.login),
     readState(octokit, owner, repo),
   ]);
 
