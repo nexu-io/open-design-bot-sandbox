@@ -46,7 +46,7 @@ export function welcomeSparkComment(card: CardProps, cardImageUrl: string, isFir
     ``,
     `<img src="${cardImageUrl}" width="420" alt="Spark card for @${card.username}" />`,
     ``,
-    `> ✨ 🔥 *Lit the first spark.*`,
+    `> ✨ 🔥 *Lit the spark.*`,
     ``,
     body,
     ``,

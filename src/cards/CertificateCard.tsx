@@ -5,7 +5,7 @@ export interface CertificateCardProps extends CardProps {
   tierNameEn: string;
 }
 
-const SLOGAN = "Lit the first spark.";
+const SLOGAN = "Lit the spark.";
 
 const W = 941;
 const H = 1672;

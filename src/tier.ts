@@ -21,7 +21,7 @@ export const TIERS: ReadonlyArray<TierDef> = [
     nameCn: "达芬奇",
     threshold: 0,
     accent: "#FCD34D",
-    sloganEn: "Lit the first spark.",
+    sloganEn: "Lit the spark.",
     sloganCn: "点燃第一束火花。",
     encouragementEn:
       "Every great contribution starts with a single spark. You showed up — that's the hardest step. Welcome to Open Design.",
