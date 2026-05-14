@@ -15,11 +15,18 @@ const ORANGE = "#C2532D";
 const PLAQUE_GOLD = "#9C7B3F";
 
 export function CertificateCard(p: CertificateCardProps) {
-  const topPct = p.topPercent >= 99
-    ? p.topPercent.toFixed(2).replace(/\.00$/, "")
-    : p.topPercent < 10
-    ? p.topPercent.toFixed(1).replace(/\.0$/, "")
-    : p.topPercent.toFixed(0);
+  const truncated = Math.floor(p.topPercent * 10) / 10;
+  const topPct = truncated.toFixed(1).replace(/\.0$/, "");
+  const percentText = `${topPct}%`;
+  const PERCENT_LEFT = 410;
+  const PERCENT_RIGHT_PAD = 40;
+  const PERCENT_MAX_WIDTH = W - PERCENT_LEFT - PERCENT_RIGHT_PAD;
+  const BASE_FONT = 280;
+  const APPROX_CHAR_WIDTH = 0.46;
+  const estimatedWidth = percentText.length * BASE_FONT * APPROX_CHAR_WIDTH;
+  const percentFontSize = estimatedWidth > PERCENT_MAX_WIDTH
+    ? Math.floor(BASE_FONT * (PERCENT_MAX_WIDTH / estimatedWidth))
+    : BASE_FONT;
   const points = p.points.toLocaleString();
   const tierLabel = `${p.tierNameEn.toUpperCase()} TIER`;
 
@@ -90,17 +97,20 @@ export function CertificateCard(p: CertificateCardProps) {
         style={{
           position: "absolute",
           top: 470,
-          left: 410,
+          left: PERCENT_LEFT,
+          width: PERCENT_MAX_WIDTH,
           display: "flex",
+          alignItems: "flex-end",
+          justifyContent: "flex-start",
           color: INK,
-          fontSize: 280,
+          fontSize: percentFontSize,
           fontFamily: "Bebas",
           fontWeight: 700,
           letterSpacing: 0,
           lineHeight: 1,
         }}
       >
-        {`${topPct}%`}
+        {percentText}
       </div>
 
       <div
