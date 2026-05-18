@@ -11,6 +11,10 @@
     "test:render": "tsx scripts/test-render.ts",
     "preview": "tsx scripts/preview-pr.ts",
     "post-test": "tsx scripts/post-test.ts",
+    "report:cards": "tsx scripts/contributor-card-funnel-report.ts",
+    "report:x": "tsx scripts/x-share-report.ts",
+    "report:dashboard": "tsx scripts/contributor-card-dashboard.ts",
+    "report:all": "pnpm run report:cards && pnpm run report:x && pnpm run report:dashboard",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

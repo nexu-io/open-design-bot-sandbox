@@ -24,6 +24,7 @@ import { CertificateCard } from "../src/cards/CertificateCard.tsx";
 import { tierByKey, tierFromPoints } from "../src/tier.ts";
 import { tierUpComment, welcomeSparkComment } from "../src/comment.ts";
 import { fetchVauntContributorLookup } from "../src/vaunt.ts";
+import { trackedShareUrl } from "../src/share.ts";
 
 const FONT_INTER_400_URL = "https://cdn.jsdelivr.net/fontsource/fonts/inter@latest/latin-400-normal.ttf";
 const FONT_INTER_700_URL = "https://cdn.jsdelivr.net/fontsource/fonts/inter@latest/latin-700-normal.ttf";
@@ -33,6 +34,7 @@ const CERTIFICATE_BASE_PATH = "assets/certificate-base.png";
 
 const CARDS_BRANCH = "bot-cards";
 const STATE_PATH = "data/contributor-card-state.json";
+const CARD_EVENTS_PATH = "data/card-events.jsonl";
 const SCORE_VERSION = "weighted-v1";
 
 const SCORE_WEIGHTS = {
@@ -80,6 +82,7 @@ interface EventContext {
   eventDelta: number;
   canComment: boolean;
   reason: string;
+  surface?: "pull_request" | "issue" | "discussion";
 }
 
 interface RenderArgs {
@@ -94,7 +97,73 @@ interface RenderArgs {
   totalContributors: number;
 }
 
-async function renderAndPost(octokit: BotOctokit, args: RenderArgs, stats: ContributorStats) {
+type CardEventLog = {
+  eventId: string;
+  recipient: string;
+  tierKey: TierKey;
+  tierName: string;
+  surface: "pull_request" | "issue" | "discussion";
+  threadNumber: number;
+  threadUrl: string;
+  commentUrl: string;
+  cardUrl: string;
+  shareUrl: string;
+  createdAt: string;
+  dedupeKey: string;
+};
+
+function isGithubStatus(err: unknown, status: number): boolean {
+  return Boolean(err && typeof err === "object" && "status" in err && (err as { status: number }).status === status);
+}
+
+function cardEventDedupeKey(event: Pick<CardEventLog, "recipient" | "tierKey" | "surface" | "createdAt">): string {
+  const bucket = Math.floor(new Date(event.createdAt).getTime() / (5 * 60 * 1000));
+  return `${event.recipient.toLowerCase()}:${event.tierKey}:${event.surface}:${bucket}`;
+}
+
+async function appendCardEvent(
+  octokit: BotOctokit,
+  owner: string,
+  repo: string,
+  event: CardEventLog,
+) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let current = "";
+    let sha: string | undefined;
+    try {
+      const res = await octokit.rest.repos.getContent({
+        owner,
+        repo,
+        path: CARD_EVENTS_PATH,
+        ref: CARDS_BRANCH,
+      });
+      if (!Array.isArray(res.data) && res.data.type === "file" && "content" in res.data) {
+        current = Buffer.from(res.data.content, "base64").toString("utf8");
+        sha = res.data.sha;
+      }
+    } catch (err: unknown) {
+      if (!isGithubStatus(err, 404)) throw err;
+    }
+
+    try {
+      await octokit.rest.repos.createOrUpdateFileContents({
+        owner,
+        repo,
+        path: CARD_EVENTS_PATH,
+        message: `chore(contributor-bot): append card event for @${event.recipient}`,
+        content: Buffer.from(`${current.replace(/\n?$/, "\n")}${JSON.stringify(event)}\n`).toString("base64"),
+        branch: CARDS_BRANCH,
+        ...(sha ? { sha } : {}),
+      });
+      return;
+    } catch (err: unknown) {
+      if (isGithubStatus(err, 409) && attempt < 2) continue;
+      throw err;
+    }
+  }
+}
+
+async function renderAndPost(octokit: BotOctokit, args: RenderArgs, stats: ContributorStats, context: EventContext) {
   const { owner, repo, threadNumber, author, tierKey, scenario, points, rank, totalContributors } = args;
   const tier = tierByKey(tierKey);
 
@@ -140,7 +209,8 @@ async function renderAndPost(octokit: BotOctokit, args: RenderArgs, stats: Contr
   const pngBase64 = Buffer.from(png).toString("base64");
 
   const ts = new Date().toISOString().replace(/[:.]/g, "-");
-  const pngPath = `data/cards/${author.login}-${tierKey}-${ts}.png`;
+  const eventId = `${author.login}-${tierKey}-${ts}`;
+  const pngPath = `data/cards/${eventId}.png`;
 
   await ensureCardsBranch(octokit, owner, repo);
 
@@ -158,14 +228,33 @@ async function renderAndPost(octokit: BotOctokit, args: RenderArgs, stats: Contr
 
   const activityCount = stats.prsMerged + stats.reviews + stats.issuesOpened + stats.commentedThreads;
   const body = scenario === "welcome-spark"
-    ? welcomeSparkComment(cardProps, pngUrl, activityCount <= 1)
-    : tierUpComment(cardProps, pngUrl);
+    ? welcomeSparkComment(cardProps, pngUrl, activityCount <= 1, eventId)
+    : tierUpComment(cardProps, pngUrl, eventId);
 
   console.log(`💬 Posting comment on #${threadNumber} ...`);
   const comment = await octokit.rest.issues.createComment({
     owner, repo, issue_number: threadNumber, body,
   });
   console.log(`   ✅ posted: ${comment.data.html_url}`);
+
+  const createdAt = comment.data.created_at || new Date().toISOString();
+  const surface = context.surface || "issue";
+  const eventLog: CardEventLog = {
+    eventId,
+    recipient: author.login,
+    tierKey,
+    tierName: tier.nameEn,
+    surface,
+    threadNumber,
+    threadUrl: comment.data.html_url.split("#")[0] || comment.data.html_url,
+    commentUrl: comment.data.html_url,
+    cardUrl: pngUrl,
+    shareUrl: trackedShareUrl(eventId),
+    createdAt,
+    dedupeKey: cardEventDedupeKey({ recipient: author.login, tierKey, surface, createdAt }),
+  };
+  await appendCardEvent(octokit, owner, repo, eventLog);
+  console.log(`   ✅ logged: ${CARD_EVENTS_PATH}`);
 }
 
 async function ensureCardsBranch(octokit: BotOctokit, owner: string, repo: string) {
@@ -317,6 +406,7 @@ function extractContext(eventName: string, event: any): EventContext | null {
       eventDelta: 1,
       canComment: true,
       reason: "merged PR",
+      surface: "pull_request",
     };
   }
 
@@ -327,6 +417,7 @@ function extractContext(eventName: string, event: any): EventContext | null {
       eventDelta: 1,
       canComment: true,
       reason: "opened issue",
+      surface: "issue",
     };
   }
 
@@ -337,6 +428,7 @@ function extractContext(eventName: string, event: any): EventContext | null {
       eventDelta: 1,
       canComment: true,
       reason: "submitted PR review",
+      surface: "pull_request",
     };
   }
 
@@ -347,6 +439,7 @@ function extractContext(eventName: string, event: any): EventContext | null {
       eventDelta: 1,
       canComment: true,
       reason: "created issue/PR comment",
+      surface: event.issue?.pull_request ? "pull_request" : "issue",
     };
   }
 
@@ -357,6 +450,7 @@ function extractContext(eventName: string, event: any): EventContext | null {
       eventDelta: 1,
       canComment: true,
       reason: "created PR review comment",
+      surface: "pull_request",
     };
   }
 
@@ -366,6 +460,7 @@ function extractContext(eventName: string, event: any): EventContext | null {
       eventDelta: 1,
       canComment: false,
       reason: "created discussion",
+      surface: "discussion",
     };
   }
 
@@ -375,6 +470,7 @@ function extractContext(eventName: string, event: any): EventContext | null {
       eventDelta: 1,
       canComment: false,
       reason: "created discussion comment",
+      surface: "discussion",
     };
   }
 
@@ -492,7 +588,7 @@ async function main() {
       points: currentScore,
       rank,
       totalContributors,
-    }, stats);
+    }, stats, context);
   } else if (decision.announce && !context.canComment) {
     console.log("   tier crossed, but this event has no supported GitHub comment surface yet");
   } else {

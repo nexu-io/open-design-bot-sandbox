@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: contributor-bot-${{ github.event.pull_request.number || github.event.issue.number }}
+  group: contributor-bot
   cancel-in-progress: false
 
 jobs:

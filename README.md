@@ -54,6 +54,31 @@ The bot's comment looks like this (pulled from a real test):
 
 ---
 
+## Dashboard and share tracking
+
+Regenerate the contributor card dashboard locally:
+
+```bash
+GITHUB_TOKEN=$(gh auth token) pnpm run report:all
+open preview/index.html
+```
+
+The report keeps two card counts:
+
+- `Deduped Cards Posted`: business reporting count, with historical duplicate bursts removed.
+- `Raw Cards Posted`: visible bot comments, kept for audit.
+
+X share links point at `https://open-design.ai/share/:eventId`. That route records a best-effort click event and redirects to the Open Design GitHub repo with contributor-card UTM params. X API enrichment is optional; set `X_BEARER_TOKEN` when available, otherwise the dashboard still builds from GitHub comments plus the manual CSV template.
+
+The scheduled dashboard workflow needs these secrets:
+
+- `VERCEL_TOKEN`
+- `VERCEL_ORG_ID`
+- `VERCEL_PROJECT_ID`
+- optional `X_BEARER_TOKEN`
+
+---
+
 ## Reporting bugs
 
 If the bot does **not** comment within 2 minutes, or the card looks broken, ping `@ashleyashli` with:
