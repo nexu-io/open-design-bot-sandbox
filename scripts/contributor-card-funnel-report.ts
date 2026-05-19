@@ -20,6 +20,7 @@ type IssueComment = {
 type CardEvent = {
   createdAt: string;
   recipient: string;
+  legacyTierName: string;
   tierName: string;
   tierKey: string;
   surface: "issue" | "pull_request";
@@ -81,12 +82,29 @@ function parseThread(url: string): { surface: "issue" | "pull_request"; threadNu
 
 function tierKeyFromName(name: string): string {
   const normalized = name.toLowerCase();
-  if (normalized.includes("da vinci")) return "spark";
-  if (normalized.includes("giotto")) return "signal";
-  if (normalized.includes("praxiteles")) return "node";
-  if (normalized.includes("phidias")) return "beacon";
-  if (normalized.includes("imhotep")) return "nova";
+  if (normalized.includes("spark") || normalized.includes("da vinci")) return "spark";
+  if (normalized.includes("signal") || normalized.includes("giotto")) return "signal";
+  if (normalized.includes("node") || normalized.includes("praxiteles")) return "node";
+  if (normalized.includes("beacon") || normalized.includes("phidias")) return "beacon";
+  if (normalized.includes("nova") || normalized.includes("imhotep")) return "nova";
   return normalized.replace(/[^a-z0-9]+/g, "-") || "unknown";
+}
+
+function displayTierName(tierKey: string, fallback: string): string {
+  switch (tierKey) {
+    case "spark":
+      return "Da Vinci";
+    case "signal":
+      return "Giotto";
+    case "node":
+      return "Praxiteles";
+    case "beacon":
+      return "Phidias";
+    case "nova":
+      return "Imhotep";
+    default:
+      return fallback;
+  }
 }
 
 function parseCardComment(comment: IssueComment): CardEvent | null {
@@ -100,15 +118,17 @@ function parseCardComment(comment: IssueComment): CardEvent | null {
   if (!thread) return null;
   const cardUrl = img[1]!;
   const eventId = img[2]!.replace(/\.png$/, "");
-  const tierName = body.match(/leveled up to \*\*([^*]+)\*\*/i)?.[1]
+  const legacyTierName = body.match(/leveled up to \*\*([^*]+)\*\*/i)?.[1]
     || body.match(/alt="([^"]+) card for/i)?.[1]
     || eventId.split("-").at(-2)
     || "unknown";
-  const tierKey = tierKeyFromName(tierName);
+  const tierKey = tierKeyFromName(legacyTierName);
+  const tierName = displayTierName(tierKey, legacyTierName);
   const bucket = Math.floor(new Date(comment.created_at).getTime() / (5 * 60 * 1000));
   return {
     createdAt: comment.created_at,
     recipient,
+    legacyTierName,
     tierName,
     tierKey,
     surface: thread.surface,
@@ -162,6 +182,7 @@ async function main() {
     "recipient",
     "tierKey",
     "tierName",
+    "legacyTierName",
     "surface",
     "threadNumber",
     "threadUrl",
