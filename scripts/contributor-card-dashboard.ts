@@ -5,6 +5,7 @@ const OUT_DIR = "preview";
 const EVENTS_CSV = join(OUT_DIR, "contributor-card-events.csv");
 const SUMMARY_JSON = join(OUT_DIR, "contributor-card-summary.json");
 const X_SUMMARY_CSV = join(OUT_DIR, "x-share-summary.csv");
+const X_POSTS_CSV = join(OUT_DIR, "x-share-posts.csv");
 const OUTPUT_INDEX_HTML = join(OUT_DIR, "index.html");
 const OUTPUT_HTML = join(OUT_DIR, "contributor-card-dashboard.html");
 
@@ -31,6 +32,22 @@ type Summary = {
   byDay: Record<string, number>;
   byTier: Record<string, number>;
   bySurface: Record<string, number>;
+};
+
+type XSharePostRow = {
+  eventId: string;
+  recipient: string;
+  tierName: string;
+  xAuthor: string;
+  xUsername: string;
+  xPostUrl: string;
+  postedAt: string;
+  likes: string;
+  reposts: string;
+  replies: string;
+  bookmarks: string;
+  matchedCommentUrl: string;
+  source: string;
 };
 
 function requireFile(path: string) {
@@ -99,6 +116,22 @@ function recentRows(events: CardEventRow[]): string {
   </tr>`).join("");
 }
 
+function xShareRows(rows: XSharePostRow[]): string {
+  if (rows.length === 0) {
+    return `<tr><td colspan="8">No public X shares found yet. Add X_BEARER_TOKEN with recent-search access or use the manual CSV fallback.</td></tr>`;
+  }
+  return rows.slice(0, 12).map((row) => `<tr>
+    <td>${escapeHtml(row.postedAt.replace("T", " ").replace("Z", ""))}</td>
+    <td><a href="${escapeHtml(row.xPostUrl)}">@${escapeHtml(row.xUsername || row.xAuthor || "unknown")}</a></td>
+    <td>@${escapeHtml(row.recipient || "unmatched")}</td>
+    <td>${escapeHtml(row.tierName || "")}</td>
+    <td>${escapeHtml(row.likes)}</td>
+    <td>${escapeHtml(row.reposts)}</td>
+    <td>${escapeHtml(row.replies)}</td>
+    <td>${row.matchedCommentUrl ? `<a href="${escapeHtml(row.matchedCommentUrl)}">${escapeHtml(row.eventId)}</a>` : escapeHtml(row.eventId)}</td>
+  </tr>`).join("");
+}
+
 function main() {
   requireFile(EVENTS_CSV);
   requireFile(SUMMARY_JSON);
@@ -108,6 +141,7 @@ function main() {
   const events = parseCsv(readFileSync(EVENTS_CSV, "utf8")) as unknown as CardEventRow[];
   const summary = JSON.parse(readFileSync(SUMMARY_JSON, "utf8")) as Summary;
   const xSummary = parseCsv(readFileSync(X_SUMMARY_CSV, "utf8"))[0] || {};
+  const xPosts = existsSync(X_POSTS_CSV) ? parseCsv(readFileSync(X_POSTS_CSV, "utf8")) as unknown as XSharePostRow[] : [];
   const duplicateRows = Object.entries(summary.duplicateRecipients)
     .sort((a, b) => b[1] - a[1])
     .map(([recipient, count]) => `<tr><td>@${escapeHtml(recipient)}</td><td>${count}</td><td>historical duplicate burst</td></tr>`)
@@ -175,6 +209,8 @@ function main() {
       ${stat("GitHub Clicks", xSummary.x_clicks_to_github || 0, xSummary.x_to_github_conversion || "unavailable", "回流 GitHub 点击")}
     </div>
     <p class="muted">Share URLs use <code>https://open-design.ai/share/:eventId</code>, which redirects to GitHub with UTM params. X API enrichment is optional and dashboard generation does not fail when the token is missing.<br>分享链接使用 <code>https://open-design.ai/share/:eventId</code> 中转并带 UTM 跳转到 GitHub。X API 是可选增强，没有 token 时看板仍可生成。</p>
+    <h3>Public X Shares 公开 X 分享</h3>
+    <table><thead><tr><th>Posted</th><th>X Author</th><th>Card Recipient</th><th>Tier</th><th>Likes</th><th>Reposts</th><th>Replies</th><th>Event</th></tr></thead><tbody>${xShareRows(xPosts)}</tbody></table>
   </section>
 
   <section class="panel">
