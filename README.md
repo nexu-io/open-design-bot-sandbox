@@ -68,14 +68,16 @@ The report keeps two card counts:
 - `Deduped Cards Posted`: business reporting count, with historical duplicate bursts removed.
 - `Raw Cards Posted`: visible bot comments, kept for audit.
 
-X share links point at `https://open-design.ai/share/:eventId`. That route records a best-effort click event and redirects to the Open Design GitHub repo with contributor-card UTM params. X API enrichment is optional; set `X_BEARER_TOKEN` when available, otherwise the dashboard still builds from GitHub comments plus the manual CSV template.
+Share links point at `https://open-design.ai/share/:eventId`. That route records a best-effort click event in Cloudflare KV and redirects to the Open Design GitHub repo with contributor-card UTM params. The dashboard can report GitHub return clicks without X API access.
 
 The scheduled dashboard workflow needs these secrets:
 
 - `VERCEL_TOKEN`
 - `VERCEL_ORG_ID`
 - `VERCEL_PROJECT_ID`
-- optional `X_BEARER_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_API_TOKEN` with read access to the share-click KV namespace
+- `SHARE_CLICK_KV_NAMESPACE_ID`
 
 ---
 

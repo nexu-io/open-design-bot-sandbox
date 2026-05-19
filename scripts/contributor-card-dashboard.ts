@@ -5,6 +5,7 @@ const OUT_DIR = "preview";
 const EVENTS_CSV = join(OUT_DIR, "contributor-card-events.csv");
 const SUMMARY_JSON = join(OUT_DIR, "contributor-card-summary.json");
 const X_SUMMARY_CSV = join(OUT_DIR, "x-share-summary.csv");
+const CLICK_SUMMARY_CSV = join(OUT_DIR, "share-click-summary.csv");
 const OUTPUT_INDEX_HTML = join(OUT_DIR, "index.html");
 const OUTPUT_HTML = join(OUT_DIR, "contributor-card-dashboard.html");
 
@@ -31,6 +32,18 @@ type Summary = {
   byDay: Record<string, number>;
   byTier: Record<string, number>;
   bySurface: Record<string, number>;
+};
+
+type ShareClickSummaryRow = {
+  eventId: string;
+  recipient: string;
+  tierName: string;
+  clicks: string;
+  uniqueClickers: string;
+  lastClickedAt: string;
+  countries: string;
+  topReferers: string;
+  matchedCommentUrl: string;
 };
 
 function requireFile(path: string) {
@@ -99,6 +112,21 @@ function recentRows(events: CardEventRow[]): string {
   </tr>`).join("");
 }
 
+function shareClickRows(rows: ShareClickSummaryRow[]): string {
+  if (rows.length === 0) {
+    return `<tr><td colspan="7">No tracked share clicks yet. Configure Cloudflare KV read secrets after the /share route is bound to SHARE_CLICK_EVENTS.</td></tr>`;
+  }
+  return rows.slice(0, 12).map((row) => `<tr>
+    <td>${escapeHtml(row.lastClickedAt.replace("T", " ").replace("Z", ""))}</td>
+    <td>@${escapeHtml(row.recipient || "unmatched")}</td>
+    <td>${escapeHtml(row.tierName || "")}</td>
+    <td>${escapeHtml(row.clicks)}</td>
+    <td>${escapeHtml(row.uniqueClickers)}</td>
+    <td>${escapeHtml(row.countries || "unknown")}</td>
+    <td>${row.matchedCommentUrl ? `<a href="${escapeHtml(row.matchedCommentUrl)}">${escapeHtml(row.eventId)}</a>` : escapeHtml(row.eventId)}</td>
+  </tr>`).join("");
+}
+
 function main() {
   requireFile(EVENTS_CSV);
   requireFile(SUMMARY_JSON);
@@ -108,6 +136,7 @@ function main() {
   const events = parseCsv(readFileSync(EVENTS_CSV, "utf8")) as unknown as CardEventRow[];
   const summary = JSON.parse(readFileSync(SUMMARY_JSON, "utf8")) as Summary;
   const xSummary = parseCsv(readFileSync(X_SUMMARY_CSV, "utf8"))[0] || {};
+  const clickSummary = existsSync(CLICK_SUMMARY_CSV) ? parseCsv(readFileSync(CLICK_SUMMARY_CSV, "utf8")) as unknown as ShareClickSummaryRow[] : [];
   const duplicateRows = Object.entries(summary.duplicateRecipients)
     .sort((a, b) => b[1] - a[1])
     .map(([recipient, count]) => `<tr><td>@${escapeHtml(recipient)}</td><td>${count}</td><td>historical duplicate burst</td></tr>`)
@@ -167,14 +196,16 @@ function main() {
   </section>
 
   <section class="panel">
-    <h2>X Sharing And Redirect Tracking X 分享与回流追踪</h2>
+    <h2>Share Redirect Tracking 分享回流追踪</h2>
     <div class="stats">
-      ${stat("X Posts Found", xSummary.x_posts_found || 0, `X API: ${xSummary.x_api_status || "not_configured"}`, "检测到的推文")}
-      ${stat("Impressions", xSummary.x_impressions_total || 0, "from X API or CSV", "曝光数")}
-      ${stat("Engagements", xSummary.x_engagements_total || 0, "likes + reposts + replies + bookmarks", "互动数")}
-      ${stat("GitHub Clicks", xSummary.x_clicks_to_github || 0, xSummary.x_to_github_conversion || "unavailable", "回流 GitHub 点击")}
+      ${stat("GitHub Clicks", xSummary.x_clicks_to_github || 0, `KV: ${xSummary.x_api_status || "not_configured"}`, "回流 GitHub 点击")}
+      ${stat("Clicked Cards", xSummary.share_clicked_cards || 0, "cards with at least one tracked click", "至少有一次点击的卡片")}
+      ${stat("Unique Clickers", xSummary.share_unique_clickers || 0, "hashed IP + user-agent count", "按哈希估算的去重点用户")}
+      ${stat("Manual X Posts", xSummary.x_posts_found || 0, "optional CSV fallback", "可选手动导入推文数")}
     </div>
-    <p class="muted">Share URLs use <code>https://open-design.ai/share/:eventId</code>, which redirects to GitHub with UTM params. X API enrichment is optional and dashboard generation does not fail when the token is missing.<br>分享链接使用 <code>https://open-design.ai/share/:eventId</code> 中转并带 UTM 跳转到 GitHub。X API 是可选增强，没有 token 时看板仍可生成。</p>
+    <p class="muted">Share URLs use <code>https://open-design.ai/share/:eventId</code>, which records a best-effort click event in Cloudflare KV and redirects to GitHub with UTM params. This path does not require X API access.<br>分享链接使用 <code>https://open-design.ai/share/:eventId</code> 记录点击后带 UTM 跳转到 GitHub；这条链路不需要 X API。</p>
+    <h3>GitHub Clicks By Card 按卡片统计回流点击</h3>
+    <table><thead><tr><th>Last Clicked</th><th>Recipient</th><th>Tier</th><th>Clicks</th><th>Unique</th><th>Countries</th><th>Event</th></tr></thead><tbody>${shareClickRows(clickSummary)}</tbody></table>
   </section>
 
   <section class="panel">
