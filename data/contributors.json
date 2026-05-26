@@ -1,18 +1,18 @@
 {
-  "generatedAt": "2026-05-26T09:10:32.062Z",
+  "generatedAt": "2026-05-26T09:10:58.943Z",
   "totalContributors": 1,
   "contributors": {
     "ashleytheash": {
       "username": "ashleytheash",
       "avatarUrl": "https://avatars.githubusercontent.com/u/287912922?v=4",
-      "points": 42,
-      "tier": "signal",
-      "prsMerged": 2,
+      "points": 54,
+      "tier": "node",
+      "prsMerged": 3,
       "reviews": 0,
       "discussionsAnswered": 0,
       "issuesAccepted": 0,
       "streakWeeks": 0,
-      "lastActiveAt": "2026-05-26T09:10:32.062Z",
+      "lastActiveAt": "2026-05-26T09:10:58.943Z",
       "founding": false,
       "tierHistory": [
         {
@@ -22,6 +22,10 @@
         {
           "tier": "signal",
           "reachedAt": "2026-05-26T09:08:45.379Z"
+        },
+        {
+          "tier": "node",
+          "reachedAt": "2026-05-26T09:10:58.943Z"
         }
       ]
     }
