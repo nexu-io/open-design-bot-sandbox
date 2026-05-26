@@ -12,8 +12,9 @@
     "preview": "tsx scripts/preview-pr.ts",
     "post-test": "tsx scripts/post-test.ts",
     "report:cards": "tsx scripts/contributor-card-funnel-report.ts",
+    "report:share-analytics": "tsx scripts/fetch-cloudflare-share-analytics.ts",
     "report:dashboard": "tsx scripts/contributor-card-dashboard.ts",
-    "report:dashboard:full": "pnpm run report:cards && pnpm run report:dashboard",
+    "report:dashboard:full": "pnpm run report:cards && pnpm run report:share-analytics && pnpm run report:dashboard",
     "report:all": "pnpm run report:dashboard:full",
     "typecheck": "tsc --noEmit"
   },
