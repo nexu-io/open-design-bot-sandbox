@@ -4,10 +4,11 @@ import { join } from "node:path";
 const OUT_DIR = "preview";
 const EVENTS_CSV = join(OUT_DIR, "contributor-card-events.csv");
 const SUMMARY_JSON = join(OUT_DIR, "contributor-card-summary.json");
-const X_SUMMARY_CSV = join(OUT_DIR, "x-share-summary.csv");
-const CLICK_SUMMARY_CSV = join(OUT_DIR, "share-click-summary.csv");
 const OUTPUT_INDEX_HTML = join(OUT_DIR, "index.html");
 const OUTPUT_HTML = join(OUT_DIR, "contributor-card-dashboard.html");
+
+const PAGES_ANALYTICS_URL =
+  "https://dash.cloudflare.com/64ad4569ffd912432d6b86d5656484c4/pages/view/open-design-landing/analytics";
 
 type CardEventRow = {
   createdAt: string;
@@ -32,18 +33,6 @@ type Summary = {
   byDay: Record<string, number>;
   byTier: Record<string, number>;
   bySurface: Record<string, number>;
-};
-
-type ShareClickSummaryRow = {
-  eventId: string;
-  recipient: string;
-  tierName: string;
-  clicks: string;
-  uniqueClickers: string;
-  lastClickedAt: string;
-  countries: string;
-  topReferers: string;
-  matchedCommentUrl: string;
 };
 
 function requireFile(path: string) {
@@ -112,35 +101,19 @@ function recentRows(events: CardEventRow[]): string {
   </tr>`).join("");
 }
 
-function shareClickRows(rows: ShareClickSummaryRow[]): string {
-  if (rows.length === 0) {
-    return `<tr><td colspan="7">No tracked share clicks yet. Configure Cloudflare KV read secrets after the /share route is bound to SHARE_CLICK_EVENTS.</td></tr>`;
-  }
-  return rows.slice(0, 12).map((row) => `<tr>
-    <td>${escapeHtml(row.lastClickedAt.replace("T", " ").replace("Z", ""))}</td>
-    <td>@${escapeHtml(row.recipient || "unmatched")}</td>
-    <td>${escapeHtml(row.tierName || "")}</td>
-    <td>${escapeHtml(row.clicks)}</td>
-    <td>${escapeHtml(row.uniqueClickers)}</td>
-    <td>${escapeHtml(row.countries || "unknown")}</td>
-    <td>${row.matchedCommentUrl ? `<a href="${escapeHtml(row.matchedCommentUrl)}">${escapeHtml(row.eventId)}</a>` : escapeHtml(row.eventId)}</td>
-  </tr>`).join("");
-}
-
 function main() {
   requireFile(EVENTS_CSV);
   requireFile(SUMMARY_JSON);
-  requireFile(X_SUMMARY_CSV);
   mkdirSync(OUT_DIR, { recursive: true });
 
   const events = parseCsv(readFileSync(EVENTS_CSV, "utf8")) as unknown as CardEventRow[];
   const summary = JSON.parse(readFileSync(SUMMARY_JSON, "utf8")) as Summary;
-  const xSummary = parseCsv(readFileSync(X_SUMMARY_CSV, "utf8"))[0] || {};
-  const clickSummary = existsSync(CLICK_SUMMARY_CSV) ? parseCsv(readFileSync(CLICK_SUMMARY_CSV, "utf8")) as unknown as ShareClickSummaryRow[] : [];
   const duplicateRows = Object.entries(summary.duplicateRecipients)
     .sort((a, b) => b[1] - a[1])
     .map(([recipient, count]) => `<tr><td>@${escapeHtml(recipient)}</td><td>${count}</td><td>historical duplicate burst</td></tr>`)
     .join("");
+
+  const cardsWithShareLink = events.filter((event) => event.shareUrl).length;
 
   const html = `<!doctype html>
 <html lang="en">
@@ -168,6 +141,9 @@ function main() {
     th, td { padding:11px 10px; border-bottom:1px solid rgba(148,163,184,.24); text-align:left; font-size:14px; }
     th { color:#94a3b8; }
     a { color:#22d3ee; text-decoration:none; }
+    a.cta { display:inline-block; margin-top:8px; padding:12px 22px; border-radius:14px; background:linear-gradient(90deg, #22d3ee, #fbbf24); color:#0f172a; font-weight:700; letter-spacing:.01em; }
+    a.cta:hover { filter:brightness(1.08); }
+    ul { margin:6px 0 14px 22px; padding:0; }
     @media (max-width:900px) { .stats, .grid { grid-template-columns:1fr; } main { width:min(100vw - 28px, 720px); } }
   </style>
 </head>
@@ -196,16 +172,21 @@ function main() {
   </section>
 
   <section class="panel">
-    <h2>Share Redirect Tracking 分享回流追踪</h2>
+    <h2>X Share Tracking X 分享追踪</h2>
+    <p class="muted">Every contributor card comment ships a <em>Share on X</em> button that goes through <code>https://open-design.ai/share/:eventId</code> and 302-redirects back to GitHub with UTM params. Detailed numbers live in Cloudflare Pages analytics &mdash; no extra setup, no X API.<br>每张卡片评论里的 <em>Share on X</em> 按钮都会先打到 <code>https://open-design.ai/share/:eventId</code>，再带 UTM 参数跳回 GitHub。明细数字直接看 Cloudflare Pages 后台 &mdash; 无需 X API。</p>
     <div class="stats">
-      ${stat("GitHub Clicks", xSummary.x_clicks_to_github || 0, `KV: ${xSummary.x_api_status || "not_configured"}`, "回流 GitHub 点击")}
-      ${stat("Clicked Cards", xSummary.share_clicked_cards || 0, "cards with at least one tracked click", "至少有一次点击的卡片")}
-      ${stat("Unique Clickers", xSummary.share_unique_clickers || 0, "hashed IP + user-agent count", "按哈希估算的去重点用户")}
-      ${stat("Manual X Posts", xSummary.x_posts_found || 0, "optional CSV fallback", "可选手动导入推文数")}
+      ${stat("Cards with X Share Link", cardsWithShareLink, "cards posted with /share redirect link", "已带 /share 回流链接的卡片数")}
+      ${stat("Redirect Endpoint", "/share/:eventId", "live on open-design.ai", "已上线在 open-design.ai")}
+      ${stat("Detailed Numbers", "Pages Analytics", "see Cloudflare dashboard", "去 Cloudflare 后台看")}
+      ${stat("Per-Event Breakdown", "Disabled", "skipped Cloudflare KV (no permissions)", "未启用 KV 细分，省去权限折腾")}
     </div>
-    <p class="muted">Share URLs use <code>https://open-design.ai/share/:eventId</code>, which records a best-effort click event in Cloudflare KV and redirects to GitHub with UTM params. This path does not require X API access.<br>分享链接使用 <code>https://open-design.ai/share/:eventId</code> 记录点击后带 UTM 跳转到 GitHub；这条链路不需要 X API。</p>
-    <h3>GitHub Clicks By Card 按卡片统计回流点击</h3>
-    <table><thead><tr><th>Last Clicked</th><th>Recipient</th><th>Tier</th><th>Clicks</th><th>Unique</th><th>Countries</th><th>Event</th></tr></thead><tbody>${shareClickRows(clickSummary)}</tbody></table>
+    <h3>What To Check In Pages Analytics 该看哪几项</h3>
+    <ul class="muted" style="line-height:1.9;">
+      <li><strong>Top referers</strong> &mdash; if you see <code>t.co</code>, <code>x.com</code>, or <code>twitter.com</code>, that&rsquo;s proof a card landed on X. <br>看 Top referers 出现 <code>t.co</code> / <code>x.com</code> / <code>twitter.com</code>，就证明卡片真的被发到 X 了。</li>
+      <li><strong>Top paths matching <code>/share/*</code></strong> &mdash; tells you which contributor cards drove the most return clicks.<br>过滤 <code>/share/*</code> 的 Top paths，能看出哪张贡献者卡片带来最多回流点击。</li>
+      <li><strong>Requests over time</strong> &mdash; spikes after posting a card == it&rsquo;s circulating.<br>发卡后的请求峰值 == 这张卡正在被传播。</li>
+    </ul>
+    <p><a class="cta" href="${PAGES_ANALYTICS_URL}" target="_blank" rel="noreferrer">Open Cloudflare Pages Analytics &rarr;</a></p>
   </section>
 
   <section class="panel">

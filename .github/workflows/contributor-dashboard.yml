@@ -38,11 +38,8 @@ jobs:
       - name: Generate dashboard
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          SHARE_CLICK_KV_NAMESPACE_ID: ${{ secrets.SHARE_CLICK_KV_NAMESPACE_ID }}
           SHARE_BASE_URL: https://open-design.ai/share
-        run: pnpm run report:all
+        run: pnpm run report:dashboard:full
 
       - name: Deploy dashboard to Vercel
         env:
