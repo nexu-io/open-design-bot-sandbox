@@ -6,8 +6,14 @@ import { tierFromPoints, tierUp } from "./tier.ts";
 import { tierUpComment, noTierUpComment, welcomeSparkComment } from "./comment.ts";
 import { renderCardPng, defaultRenderOpts } from "./render.ts";
 import type { CardProps } from "./cards/types.ts";
+import {
+  sendEmailViaResend,
+  tierUpEmail,
+  welcomeSparkEmail,
+  type ResendEnv,
+} from "./email.ts";
 
-export interface WebhookEnv {
+export interface WebhookEnv extends ResendEnv {
   GH_REPO_OWNER: string;
   GH_REPO_NAME: string;
   DATA_PATH: string;
@@ -148,15 +154,31 @@ export async function handlePullRequestClosed(
       png,
     );
 
-    await octokit.request(
+    const eventId = `${rec.username}-${promoted.key}-${Date.now()}`;
+
+    const commentRes = await octokit.request(
       "POST /repos/{owner}/{repo}/issues/{issue_number}/comments",
       {
         owner: env.GH_REPO_OWNER,
         repo: env.GH_REPO_NAME,
         issue_number: payload.pull_request.number,
-        body: tierUpComment(cardProps, cardUrl),
+        body: tierUpComment(cardProps, cardUrl, eventId),
       },
     );
+
+    const commentUrl =
+      (commentRes.data as { html_url?: string }).html_url ??
+      `https://github.com/${env.GH_REPO_OWNER}/${env.GH_REPO_NAME}/pull/${payload.pull_request.number}`;
+
+    await sendCardEmailSafe(octokit, env, {
+      kind: "tier-up",
+      username: rec.username,
+      prNumber: payload.pull_request.number,
+      cardProps,
+      cardImageUrl: cardUrl,
+      commentUrl,
+      eventId,
+    });
   } else {
     const small = noTierUpComment(cardProps, delta);
     if (small) {
@@ -290,15 +312,31 @@ export async function handleIssueOpened(
     png,
   );
 
-  await octokit.request(
+  const eventId = `${rec.username}-spark-${Date.now()}`;
+
+  const commentRes = await octokit.request(
     "POST /repos/{owner}/{repo}/issues/{issue_number}/comments",
     {
       owner: env.GH_REPO_OWNER,
       repo: env.GH_REPO_NAME,
       issue_number: payload.issue.number,
-      body: welcomeSparkComment(cardProps, cardUrl, true),
+      body: welcomeSparkComment(cardProps, cardUrl, true, eventId),
     },
   );
+
+  const commentUrl =
+    (commentRes.data as { html_url?: string }).html_url ??
+    `https://github.com/${env.GH_REPO_OWNER}/${env.GH_REPO_NAME}/issues/${payload.issue.number}`;
+
+  await sendCardEmailSafe(octokit, env, {
+    kind: "spark",
+    username: rec.username,
+    prNumber: null,
+    cardProps,
+    cardImageUrl: cardUrl,
+    commentUrl,
+    eventId,
+  });
 }
 
 async function uploadCardImage(
@@ -322,6 +360,145 @@ async function uploadCardImage(
   });
 
   return `https://raw.githubusercontent.com/${owner}/${repo}/main/${path}`;
+}
+
+interface SendCardEmailArgs {
+  kind: "tier-up" | "spark";
+  username: string;
+  prNumber: number | null;
+  cardProps: CardProps;
+  cardImageUrl: string;
+  commentUrl: string;
+  eventId: string;
+}
+
+/**
+ * Send the contributor recognition email alongside the GitHub comment.
+ *
+ * Synchronous in the JS sense (awaited within the webhook handler) so the
+ * email lands at roughly the same moment as the card comment, but the call
+ * is wrapped in try/catch + logged: a Resend hiccup or a missing email
+ * address must never break the comment path.
+ */
+async function sendCardEmailSafe(
+  octokit: Octokit,
+  env: WebhookEnv,
+  args: SendCardEmailArgs,
+): Promise<void> {
+  try {
+    if (!env.RESEND_API_KEY || !env.RESEND_FROM_EMAIL) {
+      console.log(
+        `[email] resend not configured — skipping ${args.kind} email for @${args.username}`,
+      );
+      return;
+    }
+
+    const to = await lookupContributorEmail(
+      octokit,
+      args.username,
+      args.prNumber,
+      env.GH_REPO_OWNER,
+      env.GH_REPO_NAME,
+    );
+
+    if (!to) {
+      console.log(
+        `[email] no usable email for @${args.username} — skipping ${args.kind} email`,
+      );
+      return;
+    }
+
+    const built =
+      args.kind === "tier-up"
+        ? tierUpEmail(
+            args.cardProps,
+            args.cardImageUrl,
+            args.commentUrl,
+            args.eventId,
+          )
+        : welcomeSparkEmail(
+            args.cardProps,
+            args.cardImageUrl,
+            args.commentUrl,
+            args.eventId,
+          );
+
+    const res = await sendEmailViaResend(env, {
+      to,
+      subject: built.subject,
+      html: built.html,
+      text: built.text,
+      tags: [
+        { name: "kind", value: args.kind },
+        { name: "event_id", value: args.eventId.slice(0, 64) },
+      ],
+    });
+
+    if (res.ok) {
+      console.log(
+        `[email] sent ${args.kind} email to @${args.username} id=${res.id}`,
+      );
+    } else if (!res.skipped) {
+      console.warn(
+        `[email] failed to send ${args.kind} email to @${args.username}: ${res.error}`,
+      );
+    }
+  } catch (err) {
+    console.error(`[email] unexpected error sending ${args.kind} email:`, err);
+  }
+}
+
+/**
+ * Look up a usable email for a contributor.
+ *
+ * Strategy:
+ *   1. If we have a PR number, scan its commits and use the author email
+ *      whose `author.login` matches the username. This is the most
+ *      reliable signal — it's the email they configured for git.
+ *   2. Fall back to the public profile email exposed by GitHub.
+ *   3. Filter out GitHub's `users.noreply.github.com` privacy proxy —
+ *      those addresses are not deliverable through Resend.
+ */
+async function lookupContributorEmail(
+  octokit: Octokit,
+  username: string,
+  prNumber: number | null,
+  owner: string,
+  repo: string,
+): Promise<string | null> {
+  if (prNumber !== null) {
+    try {
+      const r = await octokit.request(
+        "GET /repos/{owner}/{repo}/pulls/{pull_number}/commits",
+        { owner, repo, pull_number: prNumber, per_page: 100 },
+      );
+      const commits = r.data as Array<{
+        author?: { login?: string } | null;
+        commit: { author?: { email?: string; name?: string } };
+      }>;
+      for (const c of commits) {
+        if (c.author?.login !== username) continue;
+        const email = c.commit.author?.email ?? null;
+        if (email && !isPrivacyEmail(email)) return email;
+      }
+    } catch (err) {
+      console.warn(`[email] could not fetch PR #${prNumber} commits:`, err);
+    }
+  }
+
+  try {
+    const r = await octokit.request("GET /users/{username}", { username });
+    const email = (r.data as { email?: string | null }).email ?? null;
+    if (email && !isPrivacyEmail(email)) return email;
+  } catch (err) {
+    console.warn(`[email] could not fetch profile for @${username}:`, err);
+  }
+
+  return null;
+}
+
+function isPrivacyEmail(email: string): boolean {
+  return /@users\.noreply\.github\.com$/i.test(email);
 }
 
 export { welcomeSparkComment };

@@ -12,3 +12,12 @@ MIIEow...
 ...full PEM contents on multiple lines (paste verbatim from the .pem file)...
 -----END RSA PRIVATE KEY-----"
 GH_WEBHOOK_SECRET="paste-the-64-hex-secret-from-secure-note"
+
+# Resend (https://resend.com/api-keys) — optional.
+# When set, the bot will send a contributor-recognition email alongside
+# the GitHub card comment (tier-up + first-issue Spark). Leave empty to
+# disable the email channel; the GitHub comment will still post.
+RESEND_API_KEY="re_xxx_paste-from-resend-dashboard"
+# RESEND_FROM_EMAIL is set in wrangler.toml [vars]; override here for
+# local dev only if you want to test from a sandbox domain.
+# RESEND_FROM_EMAIL="Open Design <hello@open-design.ai>"
