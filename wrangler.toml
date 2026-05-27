@@ -19,6 +19,11 @@ crons = ["5 0 * * *"]
 #   GH_APP_INSTALLATION_ID    = 130472709
 #   GH_APP_PRIVATE_KEY        (full PEM contents — get from 1Password / secure note)
 #   GH_WEBHOOK_SECRET         (64-char hex — get from 1Password / secure note)
+#   RESEND_API_KEY            (re_... key from https://resend.com/api-keys; the bot
+#                              sends a contributor-recognition email alongside the
+#                              GitHub card comment via Resend. Optional — when
+#                              unset the email channel is silently skipped and
+#                              the GitHub comment still posts.)
 
 [vars]
 GH_REPO_OWNER = "nexu-io"
@@ -26,3 +31,6 @@ GH_REPO_NAME = "open-design"
 DATA_PATH = "data/contributors.json"
 EVENTS_PATH = "data/events.jsonl"
 CONTRIBUTORS_MD_PATH = "CONTRIBUTORS.md"
+# From-address for Resend. Must be on a domain you've verified at
+# https://resend.com/domains. Empty value disables the email channel.
+RESEND_FROM_EMAIL = "Open Design <hello@open-design.ai>"

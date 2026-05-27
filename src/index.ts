@@ -11,6 +11,8 @@ import {
 
 interface Env extends GitHubEnv, WebhookEnv {
   GH_WEBHOOK_SECRET: string;
+  RESEND_API_KEY?: string;
+  RESEND_FROM_EMAIL?: string;
 }
 
 const app = new Hono<{ Bindings: Env }>();
