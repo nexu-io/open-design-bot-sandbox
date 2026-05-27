@@ -58,7 +58,8 @@ function rankOf(file: ContributorsFile, username: string): { rank: number; topPe
   const sorted = Object.values(file.contributors).sort((a, b) => b.points - a.points);
   const idx = sorted.findIndex((r) => r.username === username);
   const rank = idx + 1;
-  const topPercent = (rank / Math.max(1, sorted.length)) * 100;
+  const rawTopPercent = (rank / Math.max(1, sorted.length)) * 100;
+  const topPercent = Math.min(99, rawTopPercent);
   return { rank, topPercent };
 }
 
@@ -277,9 +278,12 @@ export async function handleIssueOpened(
 
   const { rec } = ensureUser(file, payload.issue.user);
   const wasNewToPublicSurface = !hasHadPublicSurface(rec);
+  const delta = applyMultiplier(POINTS.issue_opened_accepted, rec.streakWeeks);
 
+  rec.points += delta;
   rec.issuesAccepted += 1;
   rec.lastActiveAt = new Date().toISOString();
+  rec.tier = tierFromPoints(rec.points).key;
   file.generatedAt = rec.lastActiveAt;
 
   await writeContributors(
@@ -289,14 +293,14 @@ export async function handleIssueOpened(
     env.DATA_PATH,
     file,
     sha,
-    `chore(contributors): @${rec.username} opened issue #${payload.issue.number}`,
+    `chore(contributors): +${delta}pts for @${rec.username} (issue #${payload.issue.number})`,
   );
 
   await appendEvent(octokit, env.GH_REPO_OWNER, env.GH_REPO_NAME, env.EVENTS_PATH, {
     type: "issue_opened_accepted",
     user: rec.username,
     issue: payload.issue.number,
-    delta: 0,
+    delta,
   });
 
   if (!wasNewToPublicSurface) return;
