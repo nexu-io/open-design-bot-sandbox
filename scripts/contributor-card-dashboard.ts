@@ -8,8 +8,6 @@ const SHARE_ANALYTICS_JSON = join(OUT_DIR, "share-analytics.json");
 const OUTPUT_INDEX_HTML = join(OUT_DIR, "index.html");
 const OUTPUT_HTML = join(OUT_DIR, "contributor-card-dashboard.html");
 
-const PAGES_ANALYTICS_URL =
-  "https://dash.cloudflare.com/64ad4569ffd912432d6b86d5656484c4/pages/view/open-design-landing/analytics";
 const DASHBOARD_PUBLIC_BASE = "https://nexu-io.github.io/open-design-bot-sandbox";
 const SHARE_ANALYTICS_JSON_PUBLIC_URL = `${DASHBOARD_PUBLIC_BASE}/share-analytics.json`;
 const SHARE_ANALYTICS_CSV_PUBLIC_URL = `${DASHBOARD_PUBLIC_BASE}/share-analytics.csv`;
@@ -109,13 +107,12 @@ function countRows(rows: Record<string, number>): string {
     .join("");
 }
 
-function recentRows(events: CardEventRow[]): string {
-  return events.slice(-12).reverse().map((event) => `<tr>
+function allRows(events: CardEventRow[]): string {
+  return [...events].reverse().map((event) => `<tr>
     <td>${escapeHtml(event.createdAt.replace("T", " ").replace("Z", ""))}</td>
     <td>@${escapeHtml(event.recipient)}</td>
     <td>${escapeHtml(event.tierName)}</td>
     <td>${escapeHtml(event.surface)}</td>
-    <td>${event.duplicateKind === "unique" ? "Unique" : "Historical duplicate"}</td>
     <td><a href="${escapeHtml(event.commentUrl)}">#${escapeHtml(event.threadNumber)}</a></td>
   </tr>`).join("");
 }
@@ -195,8 +192,7 @@ function renderShareAnalyticsPanel(
         ${stat("Public JSON", "Not generated", "needs CF token", "缺 CF token")}
         ${stat("Public CSV", "Not generated", "needs CF token", "缺 CF token")}
       </div>
-      <p><a class="cta" href="${PAGES_ANALYTICS_URL}" target="_blank" rel="noreferrer">Open Cloudflare Pages Analytics &rarr;</a></p>
-    </section>`;
+      </section>`;
   }
   const win = analytics.windows.last30Days;
   const daily = win.daily;
@@ -227,7 +223,6 @@ function renderShareAnalyticsPanel(
       <li><a href="${SHARE_ANALYTICS_CSV_PUBLIC_URL}" target="_blank" rel="noreferrer"><code>${SHARE_ANALYTICS_CSV_PUBLIC_URL}</code></a> &mdash; <code>=IMPORTDATA(...)</code> in Google Sheets · Sheets 一行公式接入</li>
       <li>Refreshed hourly by <code>contributor-dashboard.yml</code> · 由 <code>contributor-dashboard.yml</code> 每小时刷新</li>
     </ul>
-    <p><a class="cta" href="${PAGES_ANALYTICS_URL}" target="_blank" rel="noreferrer">Open Cloudflare Pages Analytics &rarr;</a></p>
   </section>`;
 }
 
@@ -239,10 +234,6 @@ function main() {
   const events = parseCsv(readFileSync(EVENTS_CSV, "utf8")) as unknown as CardEventRow[];
   const summary = JSON.parse(readFileSync(SUMMARY_JSON, "utf8")) as Summary;
   const shareAnalytics = loadShareAnalytics();
-  const duplicateRows = Object.entries(summary.duplicateRecipients)
-    .sort((a, b) => b[1] - a[1])
-    .map(([recipient, count]) => `<tr><td>@${escapeHtml(recipient)}</td><td>${count}</td><td>historical duplicate burst</td></tr>`)
-    .join("");
 
   const cardsWithShareLink = events.filter((event) => event.shareUrl).length;
   const shareAnalyticsPanel = renderShareAnalyticsPanel(shareAnalytics, cardsWithShareLink);
@@ -259,7 +250,7 @@ function main() {
     h1 { font-size: clamp(36px, 6vw, 72px); line-height:.95; letter-spacing:-.06em; margin:0 0 10px; }
     h2 { margin:0 0 18px; }
     p, small, .muted { color:#94a3b8; line-height:1.65; }
-    .stats { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:16px; margin:24px 0; }
+    .stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:16px; margin:24px 0; }
     .stat, .panel { border:1px solid rgba(148,163,184,.24); border-radius:24px; background:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.03)); box-shadow:0 24px 80px rgba(2,6,23,.38); }
     .stat { min-height:140px; padding:20px; display:flex; flex-direction:column; justify-content:space-between; }
     .stat span { color:#94a3b8; }
@@ -273,8 +264,10 @@ function main() {
     th, td { padding:11px 10px; border-bottom:1px solid rgba(148,163,184,.24); text-align:left; font-size:14px; }
     th { color:#94a3b8; }
     a { color:#22d3ee; text-decoration:none; }
-    a.cta { display:inline-block; margin-top:8px; padding:12px 22px; border-radius:14px; background:linear-gradient(90deg, #22d3ee, #fbbf24); color:#0f172a; font-weight:700; letter-spacing:.01em; }
-    a.cta:hover { filter:brightness(1.08); }
+    .pagination { display:flex; align-items:center; gap:12px; margin-top:16px; justify-content:center; }
+    .pagination button { padding:8px 16px; border:1px solid rgba(148,163,184,.4); border-radius:8px; background:rgba(255,255,255,.06); color:#f8fafc; cursor:pointer; font-size:13px; }
+    .pagination button:hover { background:rgba(34,211,238,.15); border-color:#22d3ee; }
+    .pagination span { color:#94a3b8; font-size:13px; }
     ul { margin:6px 0 14px 22px; padding:0; }
     @media (max-width:900px) { .stats, .grid { grid-template-columns:1fr; } main { width:min(100vw - 28px, 720px); } }
   </style>
@@ -286,16 +279,8 @@ function main() {
   <p class="muted">Generated 生成时间: ${escapeHtml(summary.generatedAt)}</p>
 
   <section class="stats">
-    ${stat("Deduped Cards Posted", summary.dedupedCardEvents, "business reporting count", "用于汇报的去重口径")}
     ${stat("Raw Cards Posted", summary.rawCardComments, "visible bot comments", "真实可见 bot 评论数")}
     ${stat("Unique Recipients", summary.uniqueRecipients, "contributors who received a card", "收到卡片的去重贡献者")}
-    ${stat("Historical Duplicates", summary.historicalDuplicateCount, "duplicate burst events excluded from headline metrics", "已从核心指标排除的历史重复卡")}
-  </section>
-
-  <section class="panel">
-    <h2>Historical Duplicate Bursts 历史重复发卡</h2>
-    <p class="muted">These rows came from the old workflow race condition. They remain visible on GitHub for audit, but are excluded from deduped headline metrics.<br>这些记录来自旧 workflow 并发问题。GitHub 上仍可见用于审计，但不会进入去重后的核心汇报指标。</p>
-    <table><thead><tr><th>Recipient</th><th>Duplicate cards</th><th>Reason</th></tr></thead><tbody>${duplicateRows || `<tr><td colspan="3">No duplicate burst detected.</td></tr>`}</tbody></table>
   </section>
 
   <section class="grid">
@@ -306,9 +291,34 @@ function main() {
   ${shareAnalyticsPanel}
 
   <section class="panel">
-    <h2>Recent Card Comments 最近的卡片评论</h2>
-    <table><thead><tr><th>Time</th><th>Recipient</th><th>Tier</th><th>Surface</th><th>Dedupe</th><th>Thread</th></tr></thead><tbody>${recentRows(events)}</tbody></table>
+    <h2>Card Comments 卡片评论（共 ${events.length} 条）</h2>
+    <div id="card-table-wrap">
+      <table><thead><tr><th>Time</th><th>Recipient</th><th>Tier</th><th>Surface</th><th>Thread</th></tr></thead><tbody id="card-tbody">${allRows(events)}</tbody></table>
+    </div>
+    <div class="pagination" id="pagination"></div>
   </section>
+  <script>
+  (function(){
+    const PAGE_SIZE = 20;
+    const tbody = document.getElementById('card-tbody');
+    const allRows = Array.from(tbody.querySelectorAll('tr'));
+    const totalPages = Math.ceil(allRows.length / PAGE_SIZE);
+    let currentPage = 1;
+    function render() {
+      const start = (currentPage - 1) * PAGE_SIZE;
+      const end = start + PAGE_SIZE;
+      allRows.forEach((row, i) => { row.style.display = (i >= start && i < end) ? '' : 'none'; });
+      const pag = document.getElementById('pagination');
+      let html = '';
+      if (currentPage > 1) html += '<button onclick="window.__goPage(' + (currentPage - 1) + ')">← 上一页</button>';
+      html += '<span>第 ' + currentPage + ' / ' + totalPages + ' 页</span>';
+      if (currentPage < totalPages) html += '<button onclick="window.__goPage(' + (currentPage + 1) + ')">下一页 →</button>';
+      pag.innerHTML = html;
+    }
+    window.__goPage = function(p) { currentPage = p; render(); document.getElementById('card-table-wrap').scrollIntoView({behavior:'smooth'}); };
+    render();
+  })();
+  </script>
 </main>
 </body>
 </html>`;
