@@ -4,11 +4,16 @@ import { join } from "node:path";
 const OUT_DIR = "preview";
 const EVENTS_CSV = join(OUT_DIR, "contributor-card-events.csv");
 const SUMMARY_JSON = join(OUT_DIR, "contributor-card-summary.json");
+const SHARE_ANALYTICS_JSON = join(OUT_DIR, "share-analytics.json");
 const OUTPUT_INDEX_HTML = join(OUT_DIR, "index.html");
 const OUTPUT_HTML = join(OUT_DIR, "contributor-card-dashboard.html");
 
 const PAGES_ANALYTICS_URL =
   "https://dash.cloudflare.com/64ad4569ffd912432d6b86d5656484c4/pages/view/open-design-landing/analytics";
+const SHARE_ANALYTICS_JSON_PUBLIC_URL =
+  "https://preview-zeta-opal.vercel.app/share-analytics.json";
+const SHARE_ANALYTICS_CSV_PUBLIC_URL =
+  "https://preview-zeta-opal.vercel.app/share-analytics.csv";
 
 type CardEventRow = {
   createdAt: string;
@@ -33,6 +38,21 @@ type Summary = {
   byDay: Record<string, number>;
   byTier: Record<string, number>;
   bySurface: Record<string, number>;
+};
+
+type ShareAnalyticsDaily = { date: string; clicks: number; errors: number };
+
+type ShareAnalytics = {
+  generatedAt: string;
+  source: string;
+  functionLiveFrom: string;
+  windows: {
+    last30Days: {
+      totalClicks: number;
+      totalErrors: number;
+      daily: ShareAnalyticsDaily[];
+    };
+  };
 };
 
 function requireFile(path: string) {
@@ -101,6 +121,117 @@ function recentRows(events: CardEventRow[]): string {
   </tr>`).join("");
 }
 
+function loadShareAnalytics(): ShareAnalytics | null {
+  if (!existsSync(SHARE_ANALYTICS_JSON)) return null;
+  try {
+    return JSON.parse(readFileSync(SHARE_ANALYTICS_JSON, "utf8")) as ShareAnalytics;
+  } catch {
+    return null;
+  }
+}
+
+function renderSparkline(daily: ShareAnalyticsDaily[]): string {
+  if (!daily.length) return "";
+  const width = 720;
+  const height = 200;
+  const padding = { top: 24, right: 24, bottom: 36, left: 44 };
+  const innerW = width - padding.left - padding.right;
+  const innerH = height - padding.top - padding.bottom;
+  const max = Math.max(1, ...daily.map((d) => d.clicks));
+  type Plot = { date: string; clicks: number; x: number; y: number };
+  const plots: Plot[] = daily.map((d, i) => {
+    const x = padding.left + (daily.length === 1 ? innerW / 2 : (i / (daily.length - 1)) * innerW);
+    const y = padding.top + innerH - (d.clicks / max) * innerH;
+    return { date: d.date, clicks: d.clicks, x, y };
+  });
+  const first = plots[0]!;
+  const last = plots[plots.length - 1]!;
+  const baseline = padding.top + innerH;
+  const points = plots.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+  const area = `M ${first.x.toFixed(1)},${baseline.toFixed(1)} L ${points.split(" ").join(" L ")} L ${last.x.toFixed(1)},${baseline.toFixed(1)} Z`;
+  const yTicks = [0, Math.round(max / 2), max];
+  const gridLines = yTicks
+    .map((tick) => {
+      const y = padding.top + innerH - (tick / max) * innerH;
+      return `<line x1="${padding.left}" x2="${width - padding.right}" y1="${y}" y2="${y}" stroke="rgba(148,163,184,.18)" stroke-dasharray="3 5" />`
+        + `<text x="${padding.left - 8}" y="${y + 4}" text-anchor="end" fill="#94a3b8" font-size="11">${tick}</text>`;
+    })
+    .join("");
+  const labelStride = Math.max(1, Math.ceil(plots.length / 8));
+  const xLabels = plots
+    .map((p, i) => {
+      if (plots.length > 10 && i % labelStride !== 0 && i !== plots.length - 1) return "";
+      return `<text x="${p.x.toFixed(1)}" y="${height - 12}" text-anchor="middle" fill="#94a3b8" font-size="11">${p.date.slice(5)}</text>`;
+    })
+    .join("");
+  const dots = plots
+    .map((p) => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="#fbbf24"><title>${p.date}: ${p.clicks} click(s)</title></circle>`)
+    .join("");
+  return `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Daily share clicks">
+    <defs>
+      <linearGradient id="sparkArea" x1="0" x2="0" y1="0" y2="1">
+        <stop offset="0%" stop-color="#22d3ee" stop-opacity="0.35" />
+        <stop offset="100%" stop-color="#22d3ee" stop-opacity="0" />
+      </linearGradient>
+    </defs>
+    ${gridLines}
+    <path d="${area}" fill="url(#sparkArea)" />
+    <polyline points="${points}" fill="none" stroke="#22d3ee" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+    ${dots}
+    ${xLabels}
+  </svg>`;
+}
+
+function renderShareAnalyticsPanel(
+  analytics: ShareAnalytics | null,
+  cardsWithShareLink: number,
+): string {
+  if (!analytics) {
+    return `<section class="panel">
+      <h2>X Share Tracking X 分享追踪</h2>
+      <p class="muted">Share analytics not generated yet. Run <code>pnpm run report:share-analytics</code> with <code>CLOUDFLARE_API_TOKEN</code> set.<br>分享数据尚未生成，需要本地导出或等下一次定时任务跑完。</p>
+      <div class="stats">
+        ${stat("Cards With /share Link", cardsWithShareLink, "cards posted with /share redirect link", "已带 /share 回流链接的卡片数")}
+        ${stat("Pages Analytics", "Open in Cloudflare", "manual fallback", "手动后台兜底")}
+        ${stat("Public JSON", "Not generated", "needs CF token", "缺 CF token")}
+        ${stat("Public CSV", "Not generated", "needs CF token", "缺 CF token")}
+      </div>
+      <p><a class="cta" href="${PAGES_ANALYTICS_URL}" target="_blank" rel="noreferrer">Open Cloudflare Pages Analytics &rarr;</a></p>
+    </section>`;
+  }
+  const win = analytics.windows.last30Days;
+  const daily = win.daily;
+  const activeDays = daily.filter((d) => d.clicks > 0).length;
+  const peak = daily.reduce<ShareAnalyticsDaily | null>(
+    (acc, d) => (acc && acc.clicks >= d.clicks ? acc : d),
+    null,
+  );
+  const tableRows = [...daily]
+    .reverse()
+    .map((d) => `<tr><td>${escapeHtml(d.date)}</td><td style="text-align:right">${d.clicks}</td><td style="text-align:right">${d.errors}</td></tr>`)
+    .join("");
+  return `<section class="panel">
+    <h2>X Share Tracking X 分享追踪</h2>
+    <p class="muted">Per-day Cloudflare Pages Function invocations on <code>open-design.ai</code>. Covers <code>/share/:eventId</code> (return clicks from X) and <code>/share-out/:eventId</code> (clicks on the Share-on-X button inside GitHub). Function live from <strong>${escapeHtml(analytics.functionLiveFrom)}</strong>, earlier dates are structural zeros.<br>每天 <code>open-design.ai</code> 上 Cloudflare Pages Function 的调用数，覆盖回流点击与 GitHub 评论按钮点击；上线于 <strong>${escapeHtml(analytics.functionLiveFrom)}</strong>，之前是结构性 0。</p>
+    <div class="stats">
+      ${stat("Clicks Last 30d", win.totalClicks, `${activeDays} active day(s) since ${analytics.functionLiveFrom}`, `自上线后有 ${activeDays} 天有点击`)}
+      ${stat("Peak Day", peak ? `${peak.clicks}` : "0", peak ? `on ${peak.date}` : "no data", peak ? `日期 ${peak.date}` : "暂无")}
+      ${stat("Errors Last 30d", win.totalErrors, "non-success function invocations", "非 success 调用数")}
+      ${stat("Cards With /share Link", cardsWithShareLink, "cards posted with /share redirect link", "已带 /share 回流链接的卡片数")}
+    </div>
+    <div style="margin-top:18px;">${renderSparkline(daily)}</div>
+    <h3 style="margin-top:24px;">Daily Breakdown 按日明细</h3>
+    <table><thead><tr><th>Date</th><th style="text-align:right">Clicks</th><th style="text-align:right">Errors</th></tr></thead><tbody>${tableRows}</tbody></table>
+    <h3 style="margin-top:24px;">Public Endpoints (for downstream dashboards) 给下游看版用的公开 URL</h3>
+    <ul class="muted" style="line-height:1.9;">
+      <li><a href="${SHARE_ANALYTICS_JSON_PUBLIC_URL}" target="_blank" rel="noreferrer"><code>${SHARE_ANALYTICS_JSON_PUBLIC_URL}</code></a> &mdash; machine-readable JSON · 机器读</li>
+      <li><a href="${SHARE_ANALYTICS_CSV_PUBLIC_URL}" target="_blank" rel="noreferrer"><code>${SHARE_ANALYTICS_CSV_PUBLIC_URL}</code></a> &mdash; <code>=IMPORTDATA(...)</code> in Google Sheets · Sheets 一行公式接入</li>
+      <li>Refreshed hourly by <code>contributor-dashboard.yml</code> · 由 <code>contributor-dashboard.yml</code> 每小时刷新</li>
+    </ul>
+    <p><a class="cta" href="${PAGES_ANALYTICS_URL}" target="_blank" rel="noreferrer">Open Cloudflare Pages Analytics &rarr;</a></p>
+  </section>`;
+}
+
 function main() {
   requireFile(EVENTS_CSV);
   requireFile(SUMMARY_JSON);
@@ -108,12 +239,14 @@ function main() {
 
   const events = parseCsv(readFileSync(EVENTS_CSV, "utf8")) as unknown as CardEventRow[];
   const summary = JSON.parse(readFileSync(SUMMARY_JSON, "utf8")) as Summary;
+  const shareAnalytics = loadShareAnalytics();
   const duplicateRows = Object.entries(summary.duplicateRecipients)
     .sort((a, b) => b[1] - a[1])
     .map(([recipient, count]) => `<tr><td>@${escapeHtml(recipient)}</td><td>${count}</td><td>historical duplicate burst</td></tr>`)
     .join("");
 
   const cardsWithShareLink = events.filter((event) => event.shareUrl).length;
+  const shareAnalyticsPanel = renderShareAnalyticsPanel(shareAnalytics, cardsWithShareLink);
 
   const html = `<!doctype html>
 <html lang="en">
@@ -171,23 +304,7 @@ function main() {
     <div class="panel"><h2>Trigger Surface 触发场景</h2>${countRows(summary.bySurface)}</div>
   </section>
 
-  <section class="panel">
-    <h2>X Share Tracking X 分享追踪</h2>
-    <p class="muted">Every contributor card comment ships a <em>Share on X</em> button that goes through <code>https://open-design.ai/share/:eventId</code> and 302-redirects back to GitHub with UTM params. Detailed numbers live in Cloudflare Pages analytics &mdash; no extra setup, no X API.<br>每张卡片评论里的 <em>Share on X</em> 按钮都会先打到 <code>https://open-design.ai/share/:eventId</code>，再带 UTM 参数跳回 GitHub。明细数字直接看 Cloudflare Pages 后台 &mdash; 无需 X API。</p>
-    <div class="stats">
-      ${stat("Cards with X Share Link", cardsWithShareLink, "cards posted with /share redirect link", "已带 /share 回流链接的卡片数")}
-      ${stat("Redirect Endpoint", "/share/:eventId", "live on open-design.ai", "已上线在 open-design.ai")}
-      ${stat("Detailed Numbers", "Pages Analytics", "see Cloudflare dashboard", "去 Cloudflare 后台看")}
-      ${stat("Per-Event Breakdown", "Disabled", "skipped Cloudflare KV (no permissions)", "未启用 KV 细分，省去权限折腾")}
-    </div>
-    <h3>What To Check In Pages Analytics 该看哪几项</h3>
-    <ul class="muted" style="line-height:1.9;">
-      <li><strong>Top referers</strong> &mdash; if you see <code>t.co</code>, <code>x.com</code>, or <code>twitter.com</code>, that&rsquo;s proof a card landed on X. <br>看 Top referers 出现 <code>t.co</code> / <code>x.com</code> / <code>twitter.com</code>，就证明卡片真的被发到 X 了。</li>
-      <li><strong>Top paths matching <code>/share/*</code></strong> &mdash; tells you which contributor cards drove the most return clicks.<br>过滤 <code>/share/*</code> 的 Top paths，能看出哪张贡献者卡片带来最多回流点击。</li>
-      <li><strong>Requests over time</strong> &mdash; spikes after posting a card == it&rsquo;s circulating.<br>发卡后的请求峰值 == 这张卡正在被传播。</li>
-    </ul>
-    <p><a class="cta" href="${PAGES_ANALYTICS_URL}" target="_blank" rel="noreferrer">Open Cloudflare Pages Analytics &rarr;</a></p>
-  </section>
+  ${shareAnalyticsPanel}
 
   <section class="panel">
     <h2>Recent Card Comments 最近的卡片评论</h2>
