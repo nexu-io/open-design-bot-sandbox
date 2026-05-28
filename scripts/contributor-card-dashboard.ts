@@ -10,10 +10,9 @@ const OUTPUT_HTML = join(OUT_DIR, "contributor-card-dashboard.html");
 
 const PAGES_ANALYTICS_URL =
   "https://dash.cloudflare.com/64ad4569ffd912432d6b86d5656484c4/pages/view/open-design-landing/analytics";
-const SHARE_ANALYTICS_JSON_PUBLIC_URL =
-  "https://preview-zeta-opal.vercel.app/share-analytics.json";
-const SHARE_ANALYTICS_CSV_PUBLIC_URL =
-  "https://preview-zeta-opal.vercel.app/share-analytics.csv";
+const DASHBOARD_PUBLIC_BASE = "https://nexu-io.github.io/open-design-bot-sandbox";
+const SHARE_ANALYTICS_JSON_PUBLIC_URL = `${DASHBOARD_PUBLIC_BASE}/share-analytics.json`;
+const SHARE_ANALYTICS_CSV_PUBLIC_URL = `${DASHBOARD_PUBLIC_BASE}/share-analytics.csv`;
 
 type CardEventRow = {
   createdAt: string;
