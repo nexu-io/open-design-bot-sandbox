@@ -4,6 +4,13 @@ on:
   workflow_dispatch:
   schedule:
     - cron: "17 * * * *"
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/contributor-dashboard.yml
+      - scripts/fetch-cloudflare-share-analytics.ts
+      - scripts/contributor-card-dashboard.ts
+      - scripts/contributor-card-funnel-report.ts
 
 permissions:
   contents: read
