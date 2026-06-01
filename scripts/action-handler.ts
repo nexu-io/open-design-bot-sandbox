@@ -342,7 +342,7 @@ function resolveCurrentScore(args: {
   const state = args.existing?.scoreVersion === SCORE_VERSION ? args.existing.lastKnownScore + event : 0;
 
   return {
-    currentScore: Math.max(githubWeighted, state, event),
+    currentScore: Math.max(vauntRankScore, githubWeighted, state, event),
     sources: { vauntRankScore, githubWeighted, state, event },
   };
 }
@@ -399,7 +399,11 @@ async function writeState(
 }
 
 function extractContext(eventName: string, event: any): EventContext | null {
-  if (eventName === "pull_request_target" && event.action === "closed" && event.pull_request?.merged) {
+  if (
+    (eventName === "pull_request" || eventName === "pull_request_target") &&
+    event.action === "closed" &&
+    event.pull_request?.merged
+  ) {
     return {
       actor: event.pull_request.user,
       threadNumber: event.pull_request.number,
