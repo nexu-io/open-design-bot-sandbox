@@ -1,0 +1,4 @@
+PR merge smoke test for contributor bot.
+
+Created to verify that pull_request.closed merged events are handled after
+the action handler started accepting the workflow's pull_request event name.
