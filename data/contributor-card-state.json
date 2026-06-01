@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-01T06:10:11.658Z",
+  "generatedAt": "2026-06-01T06:26:10.274Z",
   "contributors": {
     "qiongyu1999": {
       "lastAnnouncedTier": "signal",
@@ -15,8 +15,8 @@
     },
     "leilei926524-tech": {
       "lastAnnouncedTier": "node",
-      "lastKnownScore": 490,
-      "lastCheckedAt": "2026-06-01T06:10:11.658Z",
+      "lastKnownScore": 502,
+      "lastCheckedAt": "2026-06-01T06:26:10.274Z",
       "scoreVersion": "weighted-v1",
       "lastAnnouncedAt": "2026-06-01T06:10:11.658Z"
     }
