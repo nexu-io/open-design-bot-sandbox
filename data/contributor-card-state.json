@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-01T06:26:10.274Z",
+  "generatedAt": "2026-06-10T09:57:31.470Z",
   "contributors": {
     "qiongyu1999": {
       "lastAnnouncedTier": "signal",
@@ -19,6 +19,13 @@
       "lastCheckedAt": "2026-06-01T06:26:10.274Z",
       "scoreVersion": "weighted-v1",
       "lastAnnouncedAt": "2026-06-01T06:10:11.658Z"
+    },
+    "kokisanai": {
+      "lastAnnouncedTier": "signal",
+      "lastKnownScore": 138,
+      "lastCheckedAt": "2026-06-10T09:57:31.470Z",
+      "scoreVersion": "weighted-v1",
+      "lastAnnouncedAt": "2026-06-10T09:57:31.470Z"
     }
   }
 }
